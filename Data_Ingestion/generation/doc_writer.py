@@ -59,8 +59,16 @@ def export_job(job_id: str, output_format: Optional[str] = None) -> tuple[Path, 
         # Collect sections in order — prefer accepted version, fall back to current
         sections_content: list[dict] = []
         for sec in sorted(job.sections, key=lambda s: s.order_index):
+            # Handle sections without versions (newly added, not yet generated)
             if not sec.versions:
+                sections_content.append({
+                    "key":     getattr(sec, "section_key", None) or "",
+                    "title":   sec.section_title,
+                    "content": "[Section content pending — not yet generated]",
+                    "version": 0,
+                })
                 continue
+
             # Pick accepted version first, then latest
             accepted = next((v for v in sec.versions if v.is_accepted), None)
             latest   = max(sec.versions, key=lambda v: v.version_number)

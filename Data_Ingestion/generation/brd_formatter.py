@@ -222,12 +222,21 @@ def _add_generic_sections(doc, sections: list[dict]) -> None:
     n = 0
     for sec in sections:
         content = (sec.get("content") or "").strip()
-        if not content:
-            continue   # skip empty sections so the DOCX matches the preview
         n += 1
         title = sec.get("title") or f"Section {n}"
         doc.add_heading(f"{n}. {title}", level=1)
-        _render_brd_markdown(doc, content)
+
+        # Render content or placeholder if not yet generated
+        if content and not content.startswith("[Section content pending"):
+            _render_brd_markdown(doc, content)
+        elif content:
+            # Show pending placeholder in italic gray
+            p = doc.add_paragraph()
+            run = p.add_run(content)
+            from docx.shared import Pt, RGBColor
+            run.font.italic = True
+            run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+
         doc.add_paragraph()   # spacer between sections
 
 
