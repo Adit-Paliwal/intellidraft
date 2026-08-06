@@ -2,209 +2,244 @@
   "id": "brd",
   "name": "Business Requirements Document",
   "document_type": "Business Requirements Document (BRD)",
-  "description": "Formal BRD following the Adani / AESL 13-section template with numbered sub-sections (4.1, 4.2 …), document-control cover page, table-based requirements, and problem statement in Transition-from/to format. Mirror the style, tone and depth of the Drishti Data & Analytics AI Platform BRD (January 2026) — specific named entities, operational metrics, comparative competitor analysis, both As-Is and To-Be process maps, and correct table column headers for use cases, BR, FR and NFR tables.",
-  "system_instructions": "You are a senior business analyst writing a formal Business Requirements Document (BRD) for an Adani / AESL enterprise project.\n\nSTYLE AND TONE:\n- Professional, formal, third-person business English. Match the register and sentence structure of AESL internal governance documents.\n- Be specific: extract concrete numbers, system names, team names, timelines, and monetary figures from the source documents. Never use vague placeholders.\n- Never repeat a fact you have already stated in a previous section. Each section must ADD new information — not paraphrase earlier sections.\n- Prefer active, declarative sentences over passive constructions. Keep paragraphs under 6 lines.\n\nFORMATTING RULES:\n- For table sections always output a valid GitHub-Flavored Markdown pipe table with a header row and a separator row (|---|---|).\n- Never use bullets inside a table cell — use semicolons or line-breaks only.\n- Heading levels inside a section: ## for sub-headings, ### for sub-sub-headings.\n- Bold the first word or phrase in each bullet item where the instruction asks for a labelled list.\n- Do NOT use emoji.\n\nTABLE COLUMN HEADERS — use EXACTLY these for each section type (DO NOT add or remove columns):\n  • Business Use Cases:         | Use Case # | Name | Trigger Event | Primary Actor | Secondary Actor | Main Actor | Expected Outcomes | Exception |\n  • Business Requirements:      | Req# | Description | Rationale | Impacted Stakeholder | Remarks |\n  • Functional Requirements:    | Req# | Description | Rationale | Impacted Stakeholder | Remarks |\n  • Non-Functional Requirements:| Req# | Description | Rationale | Impacted Stakeholder | Remarks |\n  • Project Schedule:           | Stage | Gate | Planned Date | Remarks |\n  • Other Constraints/Assumptions: | Dependency | Assumption | Risk | Owner | Remarks |",
-
+  "description": "Business Requirements Document — single-source template (edit this file to tune). Section/sub-section instructions state the FORMAT, exact table COLUMNS and an EXAMPLE, aligned to the reference AESL Drishti BRD.",
+  "system_instructions": "You are a senior business analyst writing a formal Business Requirements Document for Adani Energy Solutions Limited (AESL). Professional, precise, third-person business English. Be specific — pull real names, numbers, systems, dates and figures from the source material; never use vague placeholders. Each section must ADD new information — do not repeat content from other sections. Honour the 'MUST NOT INCLUDE' scope boundary supplied with each section. For table sections output a valid GitHub-flavoured Markdown pipe table with a header row and a separator row, using EXACTLY the columns named in the section spec. Do not use emoji.",
   "sections": [
     {
-      "key": "purpose",
+      "key": "s1_purpose",
       "title": "Purpose",
       "order": 1,
       "render_hint": "prose",
-      "instructions": "Write the Purpose section (2-3 short paragraphs, max 200 words total).\n\nParagraph 1 — What this document is: state the initiative name, sponsoring business unit, and what the BRD formally captures (business requirements, scope, and expected outcomes).\n\nParagraph 2 — Who should use it: name the intended audiences (business stakeholders, solution architects, project approvers, programme management office) and what each expects to take away.\n\nParagraph 3 — How it fits in the project lifecycle: where this BRD sits in the PRDM/PLDM gate process and what authorisation it enables.\n\nDO NOT describe the solution or repeat the business problem here — those go in later sections.\n\nCRITICAL: Elaborate and ADD analytical framing. Do NOT simply copy or restate the project input verbatim. A reviewer should see new context and structure, not a reworded title.",
-      "target_words": 200
+      "instructions": "**Format:** 3 short prose paragraphs (no bullets, no table).\nAnswer WHAT the project is and WHY the business needs it. Paragraph 1 - purpose of the project. Paragraph 2 - business context and current challenges. Paragraph 3 - expected outcomes with measurable targets. Business-context only ('elevator pitch').",
+      "target_words": 165,
+      "scope_boundary": "EXCLUDE: technical architecture, tool/technology names, regulatory clauses (unless user brief explicitly requires), implementation approach, cost details, timeline. This section is business-context ONLY.",
+      "variables": "Project/Product Overview, Document Intent",
+      "format": "Text",
+      "depth": "Detailed",
+      "source_fields": [
+        "Objective",
+        "Business justification expected outcomes"
+      ],
+      "remarks": "Use user input only for actual content. Keep it 3-5 paragraphs."
     },
     {
-      "key": "scope",
+      "key": "s2_scope",
       "title": "Scope",
       "order": 2,
-      "render_hint": "mixed",
-      "instructions": "Write the Scope section. Keep it concise — reviewer feedback flagged this section as too long.\n\nOpen with a single paragraph (2-3 sentences max) defining the overall scope boundary.\n\nThen write two headed lists:\n\n**In Scope** — 5-7 bullets maximum. Each bullet = one line only. Name actual systems, teams, or capabilities.\n\n**Out of Scope** — 4-6 bullets maximum. Each bullet = one line with a brief rationale.\n\nNo sub-bullets. No paragraphs inside bullets. Tight and scannable.",
-      "target_words": 200
+      "render_hint": "list",
+      "instructions": "**Format:** one 2-line opening sentence, then TWO bulleted lists under bold sub-headings **In Scope** and **Out of Scope** (no table).\nIn-Scope bullets cover: problem focus, lifecycle stages, coverage & scale (with numbers), in-scope systems/integrations, operational deliverables, and rules/criteria. Out-of-Scope: 4-6 bullets each with a brief reason.\n**Example:** `- Ingestion of SAP ECC and non-SAP sources into the lakehouse (Bronze layer).`",
+      "target_words": 500,
+      "scope_boundary": "EXCLUDE: detailed technical architecture (that goes in Solution Overview), regulatory clauses (unless project is regulatory), cost breakdown, resource plan, vendor names.",
+      "variables": "Scope, Lifecycle, Scale, In-Scope, Out-of-Scope",
+      "format": "Text/List",
+      "depth": "Detailed",
+      "source_fields": [
+        "Objective",
+        "Pain points",
+        "Proposed solution overview"
+      ],
+      "remarks": "Mention in-scope and out-of-scope clearly. Use bullets for clarity."
     },
     {
-      "key": "terms_and_definitions",
+      "key": "s3_terms_and_definition",
       "title": "Terms and Definition",
       "order": 3,
       "render_hint": "table",
-      "instructions": "Create a Terms and Definitions table. Extract every domain-specific acronym, abbreviation, and technical term from the source documents.\n\nOutput a markdown pipe table with EXACTLY these two columns:\n\n| Term | Definition |\n|------|------------|\n\nRules:\n- Include 12-20 terms, sorted alphabetically.\n- Definitions must be in plain English — do not use the term in its own definition.\n- Do not include general English words (e.g., 'project', 'system') unless they have a domain-specific meaning here.",
-      "target_words": 300
+      "instructions": "**Format:** a Markdown table with EXACTLY two columns: `Terms | Definition`.\nList 15-20 project-specific terms that actually appear in THIS BRD, sorted alphabetically, each with a one-line plain-English meaning. Pick only project-relevant terms.\n**Example row:** `| SCADA | Supervisory Control and Data Acquisition - real-time grid control system. |`",
+      "target_words": 600,
+      "scope_boundary": "EXCLUDE: universally-known terms (API, KPI, SLA, UAT), terms not appearing in this BRD, generic industry abbreviations. Do NOT list all 547 ontology terms — only project-relevant ones.",
+      "variables": "Terms | Definition",
+      "format": "Table",
+      "remarks": "Two-column table: Term | Definition. Include domain-specific terms."
     },
     {
-      "key": "business_need",
-      "title": "Business need and why?",
+      "key": "s4_business_requirements_summary",
+      "title": "Business Requirements Summary",
       "order": 4,
-      "render_hint": "prose",
-      "instructions": "Write the 'Business need and why?' sub-section under Section 4 (Business Requirements Summary). 2-3 focused paragraphs, max 280 words.\n\nParagraph 1 — The business entity and its ambition: who AESL / the client is, what business lines they operate (name them), and what strategic ambition is driving this initiative.\n\nParagraph 2 — The gap: what specific operational capability is MISSING today. MANDATORY: include concrete operational metrics to justify the business need — e.g., peak load MW values, % load curtailment target, INR cost per kWh at the exchange vs DR programme rate, estimated number of DR events per year, manual hours per week currently spent, estimated INR annual savings. Do NOT simply restate the project input. Derive and quantify the business impact.\n\nParagraph 3 — Why now: what market dynamics, regulatory triggers (CERC/SERC DR frameworks), or grid stress milestones make this initiative urgent in this financial year.\n\nDO NOT describe the proposed solution here — this section is about the problem, not the answer.",
-      "target_words": 250
+      "render_hint": "mixed",
+      "instructions": "Generate Section \"Business Requirements Summary\" together with ALL of its sub-sections below, as ONE continuous block. Begin with a brief 2-3 line high-level intro for the parent (current situation, vision, measurable goals, solution direction), then write EACH sub-section in order under its OWN Markdown heading exactly as shown - do not merge, skip, or reorder sub-sections.\n\nSUB-SECTIONS:\n\n## 4.1 Business Need and Why?\n  - **Format:** 3 prose paragraphs.\n  - Write: (1) what business capability is needed and by whom, (2) strategic rationale, (3) urgency and consequence of inaction. Business framing only.\n  - MUST NOT INCLUDE: technical solution details, competitor references.\n\n## 4.2 Context for Business Need\n  - **Format:** 2-3 prose paragraphs.\n  - Write: the current landscape that makes this project necessary - current-state challenges, business context, organizational readiness. Do not repeat 4.1.\n  - MUST NOT INCLUDE: technical architecture, cost/timeline, competitor names.\n\n## 4.3 Problem Statement\n  - **Format:** 2-4 short prose paragraphs, one per problem dimension, using the framing 'From [current problem state] -> To [target future state]'.\n  - Write: the core problems only (process gaps, data gaps, control gaps, value gaps).\n  - MUST NOT INCLUDE: solutions, tools, or technology.\n  - **Example:** 'From fragmented reports across 6 systems -> To a single governed source of truth.'\n\n## 4.4 Business Value Delivered\n  - **Format:** bulleted list of 8-12 items, each `[✓] Category (value type): quantified benefit`.\n  - Write: measurable benefits by category (Cost savings, Efficiency, Risk mitigation, Compliance, Engagement, Data quality, Strategic optionality) with numbers.\n  - MUST NOT INCLUDE: technical benefits, unquantified fluffy claims.\n  - **Example:** `- [✓] Efficiency: 40% reduction in manual reconciliation (~2,000 hrs/yr).`\n\n## 4.5 Competitor Landscape and Positioning\n  - **Format:** ONE 3-4 line intro paragraph only (parent framing).\n  - Write: what type of solutions exist in the market for this problem domain.\n  - MUST NOT INCLUDE: specific competitor names / tool comparisons / positioning claims (those are 4.5.1-4.5.3).\n\n### 4.5.1 Competitor Landscape\n  - **Format:** bulleted list of 4-6 items.\n  - Write each: `Competitor Name (Region) - Product/Approach; Maturity: [Early/Emerging/Mature]; Benchmark: [metric]`. India first, then 1-2 global.\n  - **Example:** `- Acme Data (India) - lakehouse services; Maturity: Emerging; Benchmark: 30+ utility clients.`\n\n### 4.5.2 Similar Digital Solutions\n  - **Format:** bulleted list of 4-6 items.\n  - Write each: `Solution Category (example tools) - Strengths; how this project differentiates`.\n  - **Example:** `- Data Lakehouse platforms (Databricks, Synapse) - unified batch/stream; we add utility-domain governance.`\n\n### 4.5.3 Positioning\n  - **Format:** 2 prose paragraphs.\n  - Write: (1) organizational assets/capabilities that uniquely enable this project; (2) strategic differentiation and expected impact.\n  - MUST NOT INCLUDE: competitor names, tool names.\n\n## 4.6 Critical Success Factors\n  - **Format:** bulleted list of 6-9 items.\n  - Write each: `Factor Title - what success looks like. Ownership: [Role/Dept]`. Cover Sponsorship, Governance, Data Quality, Integration Readiness, Adoption, Compliance, Stakeholder alignment.\n  - **Example:** `- Executive Sponsorship - sustained CXO ownership and funding. Ownership: Business Head.`",
+      "target_words": 2211,
+      "composite": true,
+      "subsections": [
+        "s4_1_business_need_and_why",
+        "s4_2_context_for_business_need",
+        "s4_3_problem_statement",
+        "s4_4_business_value_delivered",
+        "s4_5_competitor_landscape_and_positioning",
+        "s4_5_1_competitor_landscape",
+        "s4_5_2_similar_digital_solutions",
+        "s4_5_3_positioning",
+        "s4_6_critical_success_factors"
+      ],
+      "scope_boundary": "EXCLUDE: technical architecture details, tool names, functional requirement tables, regulatory clauses. Sub-sections 4.1-4.6 will detail the aspects.",
+      "variables": "Business Need, Problem Statement, Vision, Goals, Proposed Solution",
+      "format": "Text",
+      "depth": "Detailed",
+      "source_fields": [
+        "Functional requirement",
+        "Workflow requirement",
+        "Success Criteria"
+      ],
+      "remarks": "Executive-style summary. Parent section — keep high-level. Details follow in 4.1–4.6."
     },
     {
-      "key": "business_context",
-      "title": "Context for business need",
+      "key": "s5_business_process",
+      "title": "Business Process",
       "order": 5,
-      "render_hint": "prose",
-      "instructions": "Write the 'Context for business need' sub-section. 2-3 paragraphs, max 220 words.\n\nCRITICAL: This section MUST provide context that is COMPLETELY UNIQUE — content that has NOT already been stated in the Purpose or Business Need sections. A reviewer will flag any repetition as a quality failure. Do NOT reuse phrases about 'virtual capacity', 'non-essential load', or 'costly power purchases' — those belong in earlier sections.\n\nParagraph 1 — Industry and regulatory environment: specific CERC/SERC regulatory framework for Demand Response programmes in India, the state of the Maharashtra electricity distribution market, and how AEML-D's obligations and opportunities differ from other DISCOMs.\n\nParagraph 2 — Organisational context: AEML-D's current digital maturity specifically in grid operations — what systems exist (SCADA, AMI, billing platforms), what integration gaps are present, and which teams are operationally affected.\n\nParagraph 3 — Strategic linkage: how this initiative links to AESL's stated digital vision or group-level programme (e.g., AARAMBH, DPDP compliance, Drishti, RDSS) and what board or leadership mandate exists for this.",
-      "target_words": 200
+      "render_hint": "mixed",
+      "instructions": "Generate Section \"Business Process\" together with ALL of its sub-sections below, as ONE continuous block. Begin with a brief parent intro, then write EACH sub-section in order under its OWN Markdown heading exactly as shown - do not merge, skip, or reorder sub-sections.\n\nPARENT INTRO (5 Business Process) - **Format:** 1 short paragraph (3-4 lines) + 6-10 numbered lifecycle steps, each `Step Name - brief description; System/Tool used`.\n\nSUB-SECTIONS:\n\n## 5.1 Pain Areas or Opportunities in Existing Operational Process\n  - **Format:** bulleted list of 7-10 items.\n  - Write each: `Category - description of the operational pain. Opportunity: what this project could solve`. Cover manual effort, data quality, governance, auditability, reporting, efficiency.\n  - MUST NOT INCLUDE: technology pain (that is 5.2).\n\n## 5.2 Pain Areas or Opportunities in Existing Technology/Systems\n  - **Format:** bulleted list of 5-8 items.\n  - Write each: `System/Category - specific technical pain. Impact: business consequence`. Reference actual systems from the technical landscape that have gaps for this use case.\n  - MUST NOT INCLUDE: operational/process pain (that is 5.1).\n\n## 5.3 Business Functionality Impact\n  - **Format:** a Markdown table with EXACTLY these 4 columns: `Department/System | Current State | Future State (Post-Implementation) | Impact/Benefit` (8-10 rows).\n  - Write: how each impacted department/system's way of working changes after the project.\n  - **Example row:** `| Billing | Manual monthly reconciliation | Automated daily reconciliation | 90% less effort, fewer disputes |`\n\n## 5.4 Business Process Impacted\n  - **Format:** 1 short paragraph (parent framing) identifying which business processes are impacted.\n  - MUST NOT INCLUDE: detailed steps (those are 5.4.1 and 5.4.2).\n\n### 5.4.1 As-Is Business Process\n  - **Format:** TWO parts - (a) a brief narrative describing how the process works TODAY and the gaps/inefficiencies; THEN (b) a Markdown table with EXACTLY these 4 columns: `Process_id | Process Name | Current Steps | Average Time (days/hours)`.\n  - Write: list each current business process as a row - its ID, name, the current steps performed, and the AVERAGE TIME each process takes today (state in days or hours).\n  - MUST NOT INCLUDE: proposed improvements (that is 5.4.2), cost.\n  - **Example table:**\n    `| Process_id | Process Name | Current Steps | Average Time (days/hours) |`\n    `| PR-01 | Monthly Data Reconciliation | Manually export from SAP IS-U, SCADA & GIS and reconcile in Excel | ~5 days |`\n\n### 5.4.2 To-Be Business Process (New/Changes Only)\n  - **Format:** a Markdown table with EXACTLY these 5 columns: `PR ID | Process Name | To-Be Description | Change Type | Enabling Systems` (10-18 rows). Change Type is one of New/Enhanced/Automated.\n  - Write: only the NEW or CHANGED processes and the value each delivers.\n  - MUST NOT INCLUDE: current-state description (that is 5.4.1).\n  - **Example row:** `| PR-01 | Data Reconciliation | Auto-reconcile across sources nightly | Automated | Databricks, SAP IS-U |`",
+      "target_words": 1692,
+      "composite": true,
+      "subsections": [
+        "s5_1_pain_areas_or_opportunities_in_existing_operatio",
+        "s5_2_pain_areas_or_opportunities_in_existing_technolo",
+        "s5_3_business_functionality_impact",
+        "s5_4_business_process_impacted",
+        "s5_4_1_as_is_business_process",
+        "s5_4_2_to_be_business_process_new_changes_only"
+      ],
+      "scope_boundary": "EXCLUDE: detailed AS-IS process (goes in 5.4.1), TO-BE detail (goes in 5.4.2), technology architecture. Focus is the lifecycle ORCHESTRATION view.",
+      "variables": "Current Process, Data Landscape, Operational Context",
+      "format": "Text",
+      "depth": "Short",
+      "source_fields": [
+        "Current process",
+        "To-Be process",
+        "Workflow requirement",
+        "Future Roadmap"
+      ],
+      "remarks": "Overview paragraph. Detailed pain areas and process impacts follow in sub-sections."
     },
     {
-      "key": "problem_statement",
-      "title": "Problem statement",
+      "key": "s6_business_use_cases",
+      "title": "Business Use Cases",
       "order": 6,
-      "render_hint": "mixed",
-      "instructions": "Write a clear, structured Problem Statement.\n\nOpen with ONE paragraph (3-5 sentences) summarising the overall problem. This paragraph MUST explicitly explain WHY the current process fails on a TECHNICAL and OPERATIONAL level — e.g., absence of automated DR notification systems, manual Excel-based tracking of demand response commitments, no real-time smart meter (AMI) data integration for load visibility, no SCADA-connected DR dispatch capability, lack of predictive load forecasting. State the business consequence (financial exposure, missed opportunity, grid penalty risk) with figures where available.\n\nThen present 5-8 specific transition statements in this EXACT format (one per line, indented as a list):\n\nTransition from [current painful state / operational or technical limitation] → [target improved state]\n\nExamples:\n- Transition from manual, phone-based DR notifications with no confirmation tracking → Automated, multi-channel (SMS/app/SCADA) dispatch with real-time acknowledgement\n- Transition from no real-time load visibility at individual consumer level → AMI-integrated demand monitoring with sub-15-minute granularity\n\nEach transition must be specific to THIS project's technical and operational failures — NOT generic observations.",
-      "target_words": 220
+      "render_hint": "table",
+      "instructions": "**Format:** a Markdown table with EXACTLY these 8 columns: `Use case # | Name | Trigger event | Primary actor | Secondary actor | Main action | Expected outcome | Exception`.\nList 10-15 business use cases covering the full lifecycle of THIS project's domain, in plain business terms (what users want to ACHIEVE). Keep each cell crisp (max ~10-15 words).\n**Example row:** `| UC-01 | Onboard data source | New source system identified | Data Engineer | Data Steward | Configure & validate ingestion pipeline | Source data available in Bronze layer | Source schema unavailable |`",
+      "target_words": 270,
+      "scope_boundary": "EXCLUDE: technical use cases (implementation-level scenarios), infrastructure use cases (backup/monitoring), regulatory use cases (unless project is regulatory). Focus on BUSINESS-USER-FACING scenarios.",
+      "variables": "Use case # | Name | Trigger event | Primary actor | Secondary actor | Main action | Expected outcome | Exception",
+      "format": "Table",
+      "depth": "Detailed",
+      "source_fields": [
+        "Objective",
+        "User roles and stakeholders",
+        "opportunities"
+      ],
+      "remarks": "Generate UC1, UC2 etc. from input. Table cells must be crisp — max 10-15 words per cell."
     },
     {
-      "key": "business_value",
-      "title": "Business value delivered",
+      "key": "s7_business_requirements",
+      "title": "Business Requirements",
       "order": 7,
-      "render_hint": "mixed",
-      "instructions": "Write the 'Business value delivered' sub-section.\n\nFirst, output a 3-column summary table:\n\n| Revenue Upside (INR) | Cost Savings (INR) | Payback (Time Duration) |\n|----------------------|--------------------|-------------------------|\n| [figure or TBD] | [figure or TBD] | [duration or TBD] |\n\nThen list the benefit categories that apply to this project (check all that apply from the source documents):\n\nBenefits derived by doing this initiative:\n- [x] Monetary Savings — [specify including headcount cost saving, year-on-year]\n- [x] Business Value Enhancement — [specify business process being impacted]\n- [x] Competitive Differentiation — [specify business process and competition]\n- [x] Automation, amounting to saving of time — [specify time saving]\n- [x] Process Improvement — [specify business process]\n- [x] Operational Efficiency — [specify service impacted]\n- [ ] Technology Upgrade — [include ARB recommendation if applicable]\n\nOnly mark [x] for categories genuinely supported by the source documents. Replace square-bracket text with specific details.\n\nFinally write 4-6 bullet points describing the specific, tangible business outcomes (quantified where possible).",
-      "target_words": 280
+      "render_hint": "table",
+      "instructions": "**Format:** a Markdown table with EXACTLY these 5 columns: `Req# | Description | Rationale | Impacted Stakeholder | Remarks`.\nList 15-20 business requirements (WHAT the business needs, not how it is built), grouped logically (e.g. Ingestion, Governance, Reporting). Use IDs like `BRQ-001` in Req#. Every requirement should trace to at least one Business Use Case. Use real stakeholder names from the brief. Keep cells short and crisp.\n**Example row:** `| BRQ-001 | The platform shall provide a single governed data catalogue. | Eliminates duplicate, conflicting reports. | Data Office, BU Heads | Traceable to UC-03 |`",
+      "target_words": 360,
+      "scope_boundary": "EXCLUDE: implementation details (belongs in FRs), NFRs, technical specifications. Focus is BUSINESS CAPABILITY requirements — what business needs the system to do.",
+      "variables": "Req# | Description | Rationale | Impacted Stakeholder | Remarks",
+      "format": "Table",
+      "depth": "Detailed",
+      "source_fields": [
+        "Functional requirement",
+        "Workflow requirement",
+        "Success Criteria"
+      ],
+      "remarks": "Requirement IDs like BRQ-001. Table cells must be short and crisp. Scale based on complexity."
     },
     {
-      "key": "competitor_landscape",
-      "title": "Competitor landscape",
+      "key": "s8_functional_requirements",
+      "title": "Functional Requirements",
       "order": 8,
-      "render_hint": "bullets",
-      "instructions": "Write the 'Competitor landscape' sub-section.\n\nOpen with ONE sentence framing the competitive context ('Several domestic and international players have advanced towards [capability area]...').\n\nThen provide NAMED competitor entries — 4-6 companies. For EACH competitor, write 3-5 sentences that cover:\n1. Who they are (scale, geography, sector)\n2. What specific DR/demand management digital capabilities they have deployed\n3. HOW their capability compares to what AEML-D is building — be specific about feature gaps, advantages, or architectural differences\n4. End each entry with: 'AEML-D vs. [Company]: [one sentence specific differentiation or gap]'\n\nFormat each entry as a sub-heading (###) with the company name, followed by the description paragraph.\n\nCRITICAL: The section must JUSTIFY AEML-D's approach — not just list who exists in the market. A reviewer should understand HOW AEML-D differs from each competitor. Examples: Tata Power DDL, BEST Mumbai, Engie, AutoGrid, Voltus, Oracle Utilities DR — select those most relevant to Demand Response in Indian distribution utilities.",
-      "target_words": 220
+      "render_hint": "table",
+      "instructions": "**Format:** a Markdown table with EXACTLY these 6 columns: `Req# | FR | Description | Rationale | Impacted Stakeholder | Remarks`.\nList 20-25 functional requirements (specific system features/behaviours). Req# links to the parent BRQ; FR is the functional-requirement ID (e.g. `FR-001`). Each FR = one testable system behaviour. Keep the FR->BRQ link in every row. Cells short and scannable.\n**Example row:** `| BRQ-001 | FR-001 | System shall auto-detect source schema changes and alert stewards. | Prevents pipeline breakage. | Data Engineering | Batch + streaming |`",
+      "target_words": 450,
+      "scope_boundary": "EXCLUDE: NFRs (quality attributes), business rules (BRQ level), infrastructure requirements. Focus is SYSTEM FEATURES — what the system does, function by function.",
+      "variables": "Req# | FR | Description | Rationale | Impacted Stakeholder | Remarks",
+      "format": "Table",
+      "depth": "Detailed",
+      "source_fields": [
+        "Functional requirement",
+        "Proposed solution overview"
+      ],
+      "remarks": "Requirement IDs like FR-001. Link to parent BRQ. Table cells must be short and scannable."
     },
     {
-      "key": "similar_digital_solutions",
-      "title": "Similar digital solutions",
+      "key": "s9_non_functional_requirements",
+      "title": "Non-Functional Requirements",
       "order": 9,
-      "render_hint": "bullets",
-      "instructions": "Write the 'Similar digital solutions' sub-section.\n\nDescribe 3-5 categories of digital solutions that exist in the market for this problem space. For each category:\n- Name the category and give 1-2 named product/platform examples\n- Explain what it does and how it relates to this project's problem\n- State whether AESL / the client intends to use, adopt, or surpass this type of solution\n\nFormat each as a bold sub-heading followed by 2-3 sentences. This section must be analytically distinct from the Competitor landscape — focus on TECHNOLOGY SOLUTIONS / PLATFORMS rather than competitor companies.\n\nClose with a short paragraph (3-4 sentences) on how the proposed solution aims to go BEYOND these digital solutions by unifying them into a single governed platform.",
-      "target_words": 180
+      "render_hint": "table",
+      "instructions": "**Format:** a Markdown table with EXACTLY these 6 columns: `Req# | NFR | Description | Rationale | Impacted Stakeholder | Remarks`.\nList 18-25 NFRs (quality attributes with measurable targets), grouped by category: Performance, Scalability, Availability, Security, Privacy, Compliance, Backup/DR, Observability, Maintainability, Usability, AI Safety (if AI). NFR is the ID (e.g. `NFR-001`); Req# links to the parent BRQ where applicable.\n**Example row:** `| BRQ-004 | NFR-001 | Dashboards shall load in <5 seconds for 500 concurrent users. | User adoption. | Operations, BU users | Peak-load target |`",
+      "target_words": 450,
+      "scope_boundary": "EXCLUDE: functional features (that's FRs), business rules, cost NFRs. Focus is QUALITY ATTRIBUTES with measurable targets.",
+      "variables": "Req# | NFR | Description | Rationale | Impacted Stakeholder | Remarks",
+      "format": "Table",
+      "depth": "Detailed",
+      "source_fields": [
+        "System involve",
+        "Integration requirement",
+        "Functional requirement",
+        "Data source and availability"
+      ],
+      "remarks": "Include NFR constraints from project input. Group by category: Performance, Security, Availability, etc."
     },
     {
-      "key": "positioning",
-      "title": "Positioning",
+      "key": "s10_solution_overview_cloud_first_approach",
+      "title": "Solution Overview - Cloud First Approach",
       "order": 10,
-      "render_hint": "prose",
-      "instructions": "Write the 'Positioning' sub-section. 2-3 paragraphs, max 200 words.\n\nThis section must JUSTIFY why the proposed solution is preferred over the competitors and alternatives listed in the previous two sub-sections. It must NOT simply describe what the solution does.\n\nParagraph 1 — Differentiation: what makes THIS approach fundamentally different from how competitors operate or what commercial platforms offer. Be specific about architectural or strategic choices (e.g., enterprise-wide vs. siloed, cloud-native vs. on-prem, integrated vs. point solutions).\n\nParagraph 2 — Fit with AESL / client strategy: why building / implementing this solution (rather than buying off-the-shelf or deferring) directly advances the organisation's specific goals, technology ecosystem, and regulatory requirements.\n\nParagraph 3 — Competitive outcome: what advantage this positioning creates — how it closes the gap with or moves ahead of named competitors, and positions the organisation as a digital leader in its sector.",
-      "target_words": 180
+      "render_hint": "list",
+      "instructions": "**Format:** 6-8 bullets, one per architectural layer (prose bullets, optional layer sub-headings; no requirements table).\nCover: Hosting/Infrastructure, Ingestion, Data Storage (Bronze/Silver/Gold), Processing/Orchestration, AI/Analytics, Dev Stack & CI/CD, Security/Integrations, Monitoring/Operations. Name real tools from the technical landscape but mark them 'candidates subject to architecture approval'.\n**Example:** `- Data Storage: medallion lakehouse on ADLS Gen2 + Delta (Bronze/Silver/Gold) - candidate.`",
+      "target_words": 176,
+      "scope_boundary": "EXCLUDE: business context (already covered), specific vendor pricing, deployment schedule (that's Section 12). Focus is TECHNICAL ARCHITECTURE at candidate level.",
+      "variables": "Cloud Platform, Data Ingestion, Bronze/Silver/Gold, Processing Engine, Infrastructure, Algorithms/AI, CI/CD",
+      "format": "Text/List/image",
+      "depth": "Detailed",
+      "source_fields": [
+        "Proposed solution overview",
+        "To-Be process",
+        "POC Input"
+      ],
+      "remarks": "Applicable for cloud/data/AI projects. Include architecture narrative and tech stack details."
     },
     {
-      "key": "critical_success_factors",
-      "title": "Critical success factors",
+      "key": "s11_key_constraints",
+      "title": "Key Constraints",
       "order": 11,
-      "render_hint": "bullets",
-      "instructions": "Write the 'Critical success factors' sub-section.\n\nOpen with ONE sentence summarising that success requires a combination of [themes relevant to this project].\n\nList 6-8 critical success factors. Number them (1. 2. 3. …). For each, write a bold title followed by a colon and 2-3 sentences explaining:\n- What the factor is\n- Why it is critical for THIS specific project\n- What happens if it is absent\n\nThese are PRE-CONDITIONS and ENABLERS — not requirements. Examples: executive sponsorship, data governance maturity, integration readiness, workforce enablement, outcome-driven use case roadmap. Make each factor specific to the project domain.",
-      "target_words": 250
+      "render_hint": "list",
+      "instructions": "**Format:** a bulleted list of 6-10 constraints grouped by category (no table).\nCategories: Performance, Security, Operational, Installation/Deployment, Procedural/Governance, Flexibility, Compatibility. One line per constraint.\n**Example:** `- Security: all data at rest must be encrypted (AES-256) and access RBAC-governed.`",
+      "target_words": 220,
+      "scope_boundary": "EXCLUDE: assumptions (that's Section 13), risks, resource limitations. Focus is DELIVERY-BINDING CONSTRAINTS — what must be true.",
+      "variables": "Performance, Security, Operational, Installation, Procedural, Flexibility, Compatibility",
+      "format": "List",
+      "remarks": "Bullet list with brief description per constraint category."
     },
     {
-      "key": "business_process_overview",
-      "title": "Business process",
+      "key": "s12_project_schedule",
+      "title": "Project Schedule",
       "order": 12,
-      "render_hint": "prose",
-      "instructions": "Write an overview paragraph for Section 5 (Business Process). This is a NARRATIVE SUMMARY — NOT a pain-area list.\n\nCRITICAL: Describe the CURRENT (as-is) operating model in neutral, factual, step-by-step narrative. Map how work actually gets done today: who initiates a demand response event, how consumers are notified, how load reduction is tracked, and how compliance is verified. Name actual systems, teams, and manual steps from the source documents.\n\nDo NOT jump into pain areas, complaints, or problem descriptions — that is reserved for sections 5.1 and 5.2. A Business Process overview must describe the baseline before identifying what is broken. Write 1 paragraph of 5-7 sentences.",
-      "target_words": 120
+      "render_hint": "table",
+      "instructions": "**Format:** one intro line, then a Markdown table with EXACTLY these 4 columns: `Stage | Gate | Planned Date | Remarks` (only 5-7 rows).\nUse the AESL standard gates: PI Gate, PC Gate, VR Gate, UATR Gate, RO Gate, PCD Gate. Durations should reflect the brief's timeline.\n**Example row:** `| Design | PC Gate | Week 4-6 | Solution architecture approved |`",
+      "target_words": 126,
+      "scope_boundary": "EXCLUDE: detailed WBS (belongs in project plan), resource assignments, cost per stage. Focus is HIGH-LEVEL GATE-BASED SCHEDULE only.",
+      "variables": "Stage | Gate | Planned Date | Remarks",
+      "format": "Table",
+      "depth": "Detailed",
+      "source_fields": [
+        "Project timeline",
+        "Deadline"
+      ],
+      "remarks": "Dates can be tentative. Table: Stage | Gate | Planned Date | Remarks"
     },
     {
-      "key": "pain_areas_operational",
-      "title": "Pain areas or opportunities in existing operational process",
+      "key": "s13_other_constraints_and_assumptions_if_any",
+      "title": "Other Constraints and Assumptions If Any",
       "order": 13,
-      "render_hint": "bullets",
-      "instructions": "Identify pain areas and improvement opportunities in the OPERATIONAL PROCESSES (people, workflows, decisions — not technology).\n\nFormat as a numbered list where each item has:\n- A bold label describing the pain area\n- 2-3 sentences describing: what the current operational problem is, how it manifests day-to-day, and what the business impact is (cost, delay, error rate, missed opportunity)\n\nInclude 5-8 pain areas. Be specific — name the process, team, or workflow affected. For each pain area, also state the OPPORTUNITY it represents (what could be achieved by fixing it).\n\nExample format:\n1. **Fragmented Reporting and Metric Inconsistency**: Teams independently create dashboards in Power BI desktop, leading to multiple versions of the same KPI. This duplicates analyst effort and causes contradictory performance insights in leadership reviews. Opportunity: a centralised semantic layer with certified KPIs would eliminate reconciliation effort and build trust in data.",
-      "target_words": 280
-    },
-    {
-      "key": "pain_areas_technology",
-      "title": "Pain areas or opportunities in existing technology/systems",
-      "order": 14,
-      "render_hint": "bullets",
-      "instructions": "Identify pain areas and improvement opportunities in the TECHNOLOGY and SYSTEMS (platforms, tools, integrations, data infrastructure).\n\nUse the format: **[Technology Pain Point Title]**: [what the limitation is] [which system/integration it affects] [business consequence]. Then state the Opportunity.\n\nStructure each entry as:\n**[Bold Title]** — [2 sentences on the problem] Opportunity: [1 sentence on the improvement].\n\nInclude 6-8 technology pain points. Name specific systems, tools, protocols, or data formats from the source documents. Aim for sub-headings such as: Fragmented Data Foundation, Limited Real-Time Capabilities, Weak Governance, Siloed Reporting, Integration Gaps, AI at Prototype Stage, Security and Compliance gaps, Cost and Observability.",
-      "target_words": 250
-    },
-    {
-      "key": "business_functionality_impact",
-      "title": "Business functionality impact",
-      "order": 15,
-      "render_hint": "prose",
-      "instructions": "Write the 'Business functionality impact' sub-section. 2-3 paragraphs.\n\nDescribe which business functions, departments, and user groups will be significantly affected by implementing this solution. For each major group, state:\n- What their current experience is\n- How the solution changes their daily operations or decision-making\n- What the net outcome is for them (efficiency gain, new capability, reduced risk)\n\nCover at minimum: operational teams, customer-facing teams, finance/compliance, IT, and leadership / executives.\n\nDO NOT repeat pain areas from 5.1 — this section focuses on the POSITIVE impact, the change the solution delivers.",
-      "target_words": 220
-    },
-    {
-      "key": "as_is_process",
-      "title": "As-Is Business Process",
-      "order": 16,
-      "render_hint": "prose",
-      "instructions": "Describe the As-Is (current) business process. Write as a flowing narrative — NOT as a bullet list.\n\nStructure:\n- Paragraph 1: How data originates and moves today (sources, formats, channels, manual steps)\n- Paragraph 2: How teams process, analyse, and report on that data today (tools used, handoffs, decision points)\n- Paragraph 3: Where the critical breakdowns occur — the most inefficient, error-prone, or slow parts of the current process\n\nIf the source documents include data source counts (e.g., '117 total data sources, 45 already integrated') or specific system names, include them. Close with a representative sample table of data sources if the source document provides one.\n\nDO NOT describe what the new solution will do — stay entirely in the current state.",
-      "target_words": 280
-    },
-    {
-      "key": "to_be_process",
-      "title": "To-Be Business Process",
-      "order": 17,
-      "render_hint": "prose",
-      "instructions": "Write the To-Be (future state) Business Process description. This sub-section (5.4.2) is REQUIRED and must describe the NEW operating model after the solution is implemented.\n\nStructure:\n- Paragraph 1: How data will originate and flow in the new state — automated ingestion, unified platform, elimination of manual steps\n- Paragraph 2: How operational teams, analytics teams, and leadership will work differently — automated alerts, real-time dashboards, AI-driven recommendations, self-service analytics\n- Paragraph 3: The overall transformation statement — from manual/siloed to digitally orchestrated, data-driven workflows\n\nDO NOT repeat As-Is descriptions — this section is purely about the TARGET state. Be specific about what the new process looks like and who benefits.",
-      "target_words": 220
-    },
-    {
-      "key": "business_use_cases",
-      "title": "Business use cases",
-      "order": 18,
-      "render_hint": "table",
-      "instructions": "Create a Business Use Cases table. Output as a markdown pipe table with EXACTLY these 8 columns (verified from reviewer comments):\n\n| Use Case # | Name | Trigger Event | Primary Actor | Secondary Actor | Main Actor | Expected Outcomes | Exception |\n|------------|------|--------------|---------------|-----------------|------------|------------------|-----------|\n| UC-001 | ... | ... | ... | ... | ... | ... | ... |\n\nRules:\n- Use Case # format: UC-001, UC-002, … (with dash and zero-padded)\n- Name: 3-5 word descriptive label\n- Trigger Event: what initiates this use case (user action, system event, scheduled time, peak threshold breach, grid signal)\n- Primary Actor: the role or system that directly performs the action (e.g., 'DR Operator', 'AEML SCADA System', 'Consumer Portal')\n- Secondary Actor: supporting role or system (e.g., 'AMI Meter', 'SMS Gateway'); leave blank if none\n- Main Actor: the actor (role, system, or external entity) that executes the primary workflow step in this use case\n- Expected Outcomes: the measurable successful result (e.g., 'Load reduced by X MW within 15 minutes')\n- Exception: what triggers failure handling and what the system does (e.g., 'Consumer does not respond → escalate to backup DR participant')\n\nInclude 8-15 use cases covering: DR event initiation, consumer notification, load curtailment verification, incentive calculation, reporting, consumer enrolment, exception handling, and admin operations.",
-      "target_words": 450
-    },
-    {
-      "key": "business_requirements_list",
-      "title": "Business requirements",
-      "order": 19,
-      "render_hint": "table",
-      "instructions": "Create a Business Requirements table. Output as a markdown pipe table with EXACTLY these 5 columns:\n\n| Req# | Description | Rationale | Impacted Stakeholder | Remarks |\n|------|-------------|-----------|----------------------|--------|\n| BRQ-001 | ... | ... | ... | ... |\n\nRules:\n- Req# format: BRQ-001, BRQ-002, …\n- Description: 'As a [role], the system should have capability to [action]' OR 'The [system/platform] shall [capability].' — one requirement per row, no sub-bullets\n- Rationale: why this requirement exists — the business driver or pain it addresses\n- Impacted Stakeholder: the primary role or team who depends on this requirement (e.g., 'Grid Operator', 'DR Programme Manager', 'Finance Team')\n- Remarks: implementation notes, phase dependency, or cross-references (leave blank if none)\n\nGroup requirements logically (e.g., DR Event Management, Consumer Enrolment, Load Monitoring, Analytics, Compliance, Security). Include 20-35 requirements. These are BUSINESS needs — not technical specifications.",
-      "target_words": 500
-    },
-    {
-      "key": "functional_requirements",
-      "title": "Functional requirements",
-      "order": 20,
-      "render_hint": "table",
-      "instructions": "Create a Functional Requirements table. Output as a markdown pipe table with EXACTLY these 5 columns:\n\n| Req# | Description | Rationale | Impacted Stakeholder | Remarks |\n|------|-------------|-----------|----------------------|--------|\n| FR-001 | ... | ... | ... | ... |\n\nRules:\n- Req# format: FR-001, FR-002, … (sequential FR numbering)\n- Description: 'The system MUST / SHALL [specific behaviour or capability]' — precise, testable, one requirement per row\n- Rationale: why this functional capability is needed — which BRQ or business pain drives it\n- Impacted Stakeholder: primary role or team that uses or depends on this function (e.g., 'DR Operator', 'Consumer Portal User')\n- Remarks: phase (Phase 1 / Phase 2), linked BRQ number (e.g., 'See BRQ-003'), or tool reference\n\nInclude 20-40 FRs. Cover the full functional scope: DR event dispatch, consumer enrolment, load monitoring, payment/incentive calculation, reporting, integration APIs, admin portal. Each FR should be traceable to a business need.",
-      "target_words": 600
-    },
-    {
-      "key": "non_functional_requirements",
-      "title": "Non-functional requirements",
-      "order": 21,
-      "render_hint": "table",
-      "instructions": "Create a Non-Functional Requirements table. Open with one sentence: 'All standard platform global best practices including testing (all phases), CI/CD, automation and SLAs should be considered.'\n\nThen output a markdown pipe table with EXACTLY these 5 columns:\n\n| Req# | Description | Rationale | Impacted Stakeholder | Remarks |\n|------|-------------|-----------|----------------------|--------|\n| NFR-001 | ... | ... | ... | ... |\n\nRules:\n- Req# format: NFR-001, NFR-002, … (sequential NFR numbering)\n- Description: the quality attribute with a specific, measurable threshold (e.g., 'DR dispatch API response time < 2 seconds under 500 concurrent requests at 99th percentile')\n- Rationale: the business or compliance driver for this NFR\n- Impacted Stakeholder: primary role or team affected (e.g., 'Grid Operations', 'IT Security', 'All End Users')\n- Remarks: applicable standard (ISO 27001, DPDP, CEA), tool reference, or linked FR number\n\nInclude NFRs covering: Performance, Security (RBAC, field-level masking, encryption at rest/transit, audit logs), Availability and Reliability (uptime SLA), Scalability, Data Governance and Lineage, Ingestion Latency, Privacy and Compliance (ISO 27001, DPDP, CEA regulations), Observability and Monitoring, CI/CD Automation, Interoperability, Support and SLA. Include 12-18 NFRs.",
-      "target_words": 450
-    },
-    {
-      "key": "solution_overview",
-      "title": "Solution overview-Cloud first approach",
-      "order": 22,
-      "render_hint": "mixed",
-      "instructions": "Write the 'Solution Overview – Cloud First Approach' section.\n\nMandatory requirement: SPECIFY THE COMPLETE TECHNOLOGY STACK. A reviewer flagged that the previous version did not name the tech stack. Every layer must be explicitly named.\n\nStructure:\n\n1. Opening paragraph (3-4 sentences): State the cloud platform (Azure, GCP, AWS — from source documents; default to Azure for AESL/Adani projects), the core architecture pattern (e.g., event-driven microservices; Medallion data architecture: Bronze/Silver/Gold layers), and the guiding principle (cloud-first, API-driven, real-time).\n\n2. Bullet list under '## Cloud and Infrastructure Stack':\n  - Cloud provider and specific services: IoT Hub / Event Hub for device telemetry; ADLS Gen2 or GCS for data lake; Azure Databricks or Dataproc for analytics; Azure SQL / BigQuery for structured data; Azure Active Directory for identity and RBAC\n\n3. Bullet list under '## Integration and Communication Layer':\n  - SCADA/AMI integration protocol (OPC-UA, MQTT, or REST API), middleware or ESB (Azure API Management, MuleSoft), communication channels for DR dispatch (SMS gateway, push notification service, SCADA command interface)\n\n4. Bullet list under '## Application and Analytics Stack':\n  - Frontend framework (React / Angular), backend runtime (Python / Node.js / Java Spring), ML platform (Azure ML, Vertex AI, MLflow for experiment tracking), dashboarding (Power BI Embedded, Grafana)\n\n5. Bullet list under '## DevOps and Security':\n  - CI/CD pipeline (Azure DevOps, GitHub Actions), container orchestration (AKS / GKE), secrets management (Azure Key Vault), encryption at rest and in transit, SIEM/monitoring (Azure Sentinel, Cloud Monitoring)\n\n6. Closing paragraph (2-3 sentences): Data residency and sovereignty, how the architecture supports future scale (new business units, new DR programme types), and extensibility roadmap.\n\nIf specific tools are not in the source documents, select the most appropriate from Adani/AESL's known Azure-first ecosystem and flag as 'recommended'.",
-      "target_words": 350
-    },
-    {
-      "key": "key_constraints",
-      "title": "Key constraints",
-      "order": 23,
-      "render_hint": "bullets",
-      "instructions": "Write the 'Key constraints' section. Organise constraints under these EXACT category headings (use bold for each heading):\n\n**Performance**\n[2-3 specific performance constraints with measurable thresholds, e.g., 'Response time less than 5 seconds for generic dashboarding']\n\n**Security**\n[2-3 security constraints — RBAC, data access control, field-level masking, encryption at rest and transit]\n\n**Operational**\n[2-3 operational constraints — backup and recovery, job scheduling, monitoring and alerting]\n\n**Installation**\n[1-2 installation / deployment constraints — multi-tenant support, business isolation, federated approach]\n\n**Procedural**\n[1-2 procedural constraints, or 'NA' if none]\n\n**Flexibility**\n[1-2 extensibility constraints — must support new business onboarding, compatibility with other programmes]\n\n**Compatibility**\n[1-2 compatibility constraints — must be compatible with named existing solutions or programmes]\n\nExtract specific constraints from the source documents. Do NOT use generic placeholders.",
-      "target_words": 220
-    },
-    {
-      "key": "project_schedule",
-      "title": "Project schedule",
-      "order": 24,
-      "render_hint": "table",
-      "instructions": "Write one opening sentence ('Below is the tentative project schedule in terms of the planned gates as per PRDM/PLDM. This will be finetuned further in the project plan.') followed by a markdown pipe table with EXACTLY these columns:\n\n| Stage | Gate | Planned Date | Remarks |\n|-------|------|-------------|--------|\n| Project Initiated | PI | [date] | |\n| Project Committed | PC | [date] | |\n| Verified & Ready | VR | [date] | |\n| UAT Executed & Ready | UATR | [date] | |\n| Roll Out | RO | [date] | |\n| Project Closed | PCD | [date] | |\n\nUse actual dates or date ranges from the source documents. If no dates are given, write 'TBD' in the Planned Date column. Remarks column should note any key conditions or dependencies for that gate.",
-      "target_words": 120
-    },
-    {
-      "key": "other_constraints_assumptions",
-      "title": "Other constraints and assumptions if any",
-      "order": 25,
-      "render_hint": "table",
-      "instructions": "Create the Other Constraints and Assumptions table. Output as a markdown pipe table with EXACTLY these columns:\n\n| Dependency | Assumption | Risk | Owner | Remarks |\n|------------|------------|------|-------|--------|\n| ... | ... | ... | ... | ... |\n\nRules:\n- Dependency: the external dependency (e.g., 'Vendor support from SAP', 'Azure infra provisioned by Central IT')\n- Assumption: what is assumed to be true for the project to proceed\n- Risk: what could go wrong if the assumption is incorrect or the dependency fails\n- Owner: the role responsible for managing this dependency or assumption\n- Remarks: mitigation or escalation approach\n\nInclude 6-10 entries covering: infrastructure availability, vendor responsiveness, data migration readiness, user availability for UAT, regulatory timelines, integration readiness, and training.",
-      "target_words": 250
+      "render_hint": "list",
+      "instructions": "**Format:** a bulleted list of 8-15 assumptions/soft-constraints (no table).\nFormat each: `Category - Description. Owner: [Role/Team if known]`. Cover: IT Infrastructure, Identity/Access, Integrations, Governance, GenAI Guardrails (if AI), Data Residency, Approvals, Support Readiness, DR/Backup, UAT Participation.\n**Example:** `- Identity/Access: SSO via Azure AD assumed available at project start. Owner: IT Security.`",
+      "target_words": 330,
+      "scope_boundary": "EXCLUDE: hard constraints (that's Section 11), risks (separate section if needed), cost analysis. Focus is ASSUMPTIONS + SOFT CONSTRAINTS that support delivery.",
+      "variables": "Dependency, Assumption, Risk, Owner, Remarks",
+      "format": "Text/List",
+      "remarks": "Include IT support, infra, approval dependencies. Keep concise."
     }
   ]
 }

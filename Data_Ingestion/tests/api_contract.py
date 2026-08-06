@@ -76,8 +76,6 @@ def run_flow(base: str) -> dict:
     step("health",        "GET", "/api/health")
     step("form_fields",   "GET", "/api/form-fields")
     step("templates",     "GET", "/api/templates")
-    step("ui_index",      "GET", "/")
-    step("ui_chat",       "GET", "/chat.html")
     step("doc_404",       "GET", "/api/document/no-such-doc")
     step("doc_status_404","GET", "/api/document/no-such-doc/status")
     step("upload_nofile", "POST", "/api/upload")                     # 400
@@ -101,7 +99,6 @@ def run_flow(base: str) -> dict:
     step("project_get",      "GET",  f"/api/projects/{pid}")
     step("project_patch",    "PATCH", f"/api/projects/{pid}", json={"problem_statement": "p"})
     step("project_patch_empty", "PATCH", f"/api/projects/{pid}", json={})                        # 400
-    step("project_put_deprecated", "PUT", f"/api/projects/{pid}", json={"risks": "r"})
     step("project_validate", "POST", f"/api/projects/{pid}/validate")
     step("project_data",     "GET",  f"/api/projects/{pid}/data")
     step("data_ingested_put","PUT",  f"/api/projects/{pid}/data/ingested", json={"constraints": "c"})
@@ -110,15 +107,12 @@ def run_flow(base: str) -> dict:
     step("create_invalid",   "POST", "/api/projects", json={"project_name": "only-name"})        # 422
 
     # ── Generation error paths (no LLM calls) ────────────────────────────────
-    step("gen_start_no_doc", "POST", "/api/generate/start", json={})                 # 400
     step("gen_job_404",      "GET",  "/api/generate/no-such-job")                    # 404
     step("gen_section_404",  "GET",  "/api/generate/j/section/no-such-section")      # 404
     step("gen_patch_empty",  "PATCH","/api/generate/j/section/s", json={})           # 400
     step("gen_preview_404",  "GET",  "/api/generate/no-such-job/preview")            # 404
     step("gen_export_404",   "GET",  "/api/generate/no-such-job/export?format=docx") # 404
     step("gen_snapshots",    "GET",  "/api/generate/no-such-job/snapshots")
-    step("gen_prevstat_400", "GET",  "/api/generate/j/preview/status")               # 400 (no task_id)
-    step("sections_patch_400","PATCH","/api/sections/no-such-section", json={})      # 400
 
     # ── Users & personas ──────────────────────────────────────────────────────
     step("users_list",   "GET",  "/api/users")

@@ -83,7 +83,7 @@ _CANCEL_WORDS   = {"no", "cancel", "stop", "abort", "nevermind", "nope",
 
 
 def _classify(message: str, phase: str) -> str:
-    words = set(re.findall(r"\w+", message.lower()))
+    words = set(re.findall(r"\w+", message.lower()[:20000]))
 
     # Modify always beats generate — handles "generate: can you modify..."
     if words & _STRONG_MODIFY:
@@ -124,7 +124,7 @@ def _best_section(message: str, sections: list) -> Optional[dict]:
     Tie-break: section appearing later in the list does NOT win on equal score,
     so the first best is kept (stable ordering).
     """
-    msg_words = set(re.findall(r"\w+", message.lower()))
+    msg_words = set(re.findall(r"\w+", message.lower()[:20000]))
     best: Optional[dict] = None
     high = 0
     for sec in sections:
@@ -174,6 +174,27 @@ def _get_or_create(
             resolved = _resolve_doc_type(doc_type)
             if resolved != chat.document_type:
                 chat.document_type = resolved
+
+    # ── Link the chat to the project's EXISTING generation job ───────────────
+    # A document is usually generated via POST /generate/project/{id} (API/UI),
+    # NOT through the chat. Without this, chat.job_id stays None and every
+    # "modify/show/regenerate" returns "no document generated yet" — the reason
+    # chatbot edits appear to do nothing. Resolve the project's latest job here
+    # (preferring one that matches this chat's document type) so edits work no
+    # matter where the document was generated. Runs each message, so a job
+    # created AFTER the chat session is picked up on the next message.
+    if not chat.job_id and chat.project_id:
+        base = db.query(GenerationJob).filter(GenerationJob.project_id == chat.project_id)
+        latest = (
+            base.filter(GenerationJob.document_type == chat.document_type)
+                .order_by(GenerationJob.created_at.desc()).first()
+            or base.order_by(GenerationJob.created_at.desc()).first()
+        )
+        if latest is not None:
+            chat.job_id = latest.job_id
+            if latest.status == "completed" and chat.phase not in ("review",):
+                chat.phase = "review"
+
     return chat
 
 
@@ -278,6 +299,22 @@ def process_message(
         chat = _get_or_create(session_id, project_id, doc_type, db)
         chat.add_message("user", message)
 
+        # ── Release the SQLite write lock BEFORE any slow work ───────────────
+        # This commit is the fix for "database is locked" triggered from the
+        # chatbot. Previously the user-message write stayed PENDING (uncommitted)
+        # for the whole handler, so the session held SQLite's single write lock
+        # across multi-second work below — the generation spawn in _do_generate
+        # (which starts the wave-parallel section writers) and the synchronous
+        # LLM regeneration in _execute_modify. Those writers then contended with
+        # this held lock and surfaced OperationalError: database is locked.
+        # Committing here keeps the transaction short: the routing work below now
+        # runs with at most a WAL *read* lock (readers never block the writer).
+        # The assistant reply + any chat state changes are persisted in the
+        # second short commit at the end. DO NOT remove this commit or move the
+        # slow sub-handlers above it. (Prod on Databricks SQL has no single-writer
+        # lock, so this class of error is local-SQLite-dev only — see db.py.)
+        db.commit()
+
         try:
             # ── Auto-advance phase when background generation completes ───────
             if chat.phase == "generating" and chat.job_id:
@@ -288,12 +325,15 @@ def process_message(
                         chat.phase = "review"
                 except Exception:
                     pass  # non-fatal — phase will advance on next successful check
+                # Flush the phase change immediately so it isn't held pending
+                # across the slow routing below (same lock-hygiene as above).
+                db.commit()
 
             # ── Pending confirmation check (always takes priority) ────────────
             pending = chat.get_pending()
             ptype   = pending.get("type") if pending else None
             if ptype in ("modify", "update_sections"):
-                words = set(re.findall(r"\w+", message.lower()))
+                words = set(re.findall(r"\w+", message.lower()[:20000]))
                 is_cancel  = bool(words & _CANCEL_WORDS and not words & _CONFIRM_WORDS)
                 is_confirm = bool(words & _CONFIRM_WORDS)
 
@@ -367,6 +407,10 @@ def process_message(
                 "data":    {},
             }
 
+        # ── Second short write: persist the assistant reply + any chat state
+        # changes (job_id / phase / pending set by the sub-handlers above). All
+        # slow work is already done, so this commit holds the write lock only
+        # briefly; SQLite's busy_timeout (30s, see db.py) absorbs any contention.
         chat.add_message("assistant", result["content"], result.get("data"))
         db.commit()
 

@@ -877,11 +877,11 @@ Deployment topology:
 # .env (Azure Key Vault referenced, not in file)
 
 # Database
-DATABASE_URL=postgresql+psycopg2://user:pass@prod-db.postgres.database.azure.com/intellidraft
+DATABASE_URL=postgresql+psycopg2://<user>@prod-db.postgres.database.azure.com/intellidraft   # password injected via secret, never committed
 LOCAL_DB=false
 
 # Cache
-REDIS_URL=rediss://:access_key@prod-cache.redis.cache.windows.net:6380/0
+REDIS_URL=rediss://prod-cache.redis.cache.windows.net:6380/0   # access key injected via secret, never committed
 PREVIEW_CACHE_TTL=3600
 
 # Generation

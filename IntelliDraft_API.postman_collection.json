@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "IntelliDraft API",
-    "description": "IntelliDraft backend API. Every document type (BRD, RFP, SOW, NIT, BOQ, NDPR, NFA, ARB, Proposal, Tech Spec, Scope) generates its own sections from its template and is styled with the Adani template. Set the {{document_type}} variable to switch types. Preview is asynchronous — poll /preview/html (or /preview/status) until status=ready.",
+    "description": "IntelliDraft backend API. Every document type (BRD, RFP, SOW, NIT, BOQ, NDPR, NFA, ARB, Proposal, Tech Spec, Scope) generates its own sections from its template and is styled with the Adani template. Set the {{document_type}} variable to switch types. Preview is asynchronous — poll /preview/html (or /preview/status) until status=ready.\n\n---\n## 🖥️ FRONTEND INTEGRATION GUIDE (read me)\nBase URL var `base_url` = http://localhost:7071/api (same-origin in prod).\nIdentity: send `X-User-Email` and `X-User-Name` headers on every call (SSO placeholder).\n\n**DB-first rule:** POST/PATCH return ids/counts only. NEVER render form data from a write response — re-read with the matching GET.\n\n**Typical create→generate flow:** Upload → Extract Fields (AI) → Create Draft → Derive Fields (AI) → Validate → Generate from Project (get job_id) → Poll Job Status until completed → Preview/Export.\n\n**Job status:** the ONLY job endpoint is GET /generate/{job_id}. There is no `/status` sub-route — a 404 there means a wrong URL.\n\n**Section edit (recommended):** POST /generate/{job_id}/section/{section_id}/regenerate with {\"instruction\":\"…\"} — single call, uses the section's input. For a manual text override use PATCH /generate/{job_id}/section/{section_id} with {\"content\":\"…\"}.\n\n**Chat section edit is two steps:** send the instruction (→confirm_modify), then send 'yes' (→section_modified), always with the same session_id.\n\n### 🆕 Changed in this release\n- Regenerate Section now accepts an inline `instruction` (no separate comment call needed).\n- Chatbot backend hardened against SQLite 'database is locked' (shorter transactions).\n\n\n### 🆕 2026-07-17: LibreOffice removed — consistent formatting\n- Preview (/preview/html) is now pure-Python HTML styled to MATCH the Word download (dark-blue tables, Calibri, numbered sections). Identical output local & Databricks.\n- PDF export (/export?format=pdf) now uses xhtml2pdf (no LibreOffice), same brand styling.\n- Manual HTML edit (/preview/save) + versioning-with-author unchanged.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "event": [
@@ -76,12 +76,6 @@
       "description": "DocumentSnapshot ID. Auto-set by POST /snapshot."
     },
     {
-      "key": "preview_task_id",
-      "value": "",
-      "type": "string",
-      "description": "Celery task ID for LibreOffice HTML preview conversion. Auto-set by GET /preview/html when pending."
-    },
-    {
       "key": "document_type",
       "value": "BRD",
       "type": "string",
@@ -127,7 +121,7 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/health",
-            "description": "Lightweight liveness probe. Zero DB cost. Returns {status: 'ok'}."
+            "description": "Lightweight liveness probe. Zero DB cost. Returns {status: 'ok'}.\n\n🖥️ FRONTEND: Where: app boot / status badge. Call on load to confirm the API is reachable before showing the workspace. No auth, no body."
           },
           "event": [
             {
@@ -194,7 +188,7 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/form-fields",
-            "description": "Returns all form field definitions for the Create Project form."
+            "description": "Returns all form field definitions for the Create Project form.\n\n🖥️ FRONTEND: Where: Create Project form scaffolding — returns the field schema/labels so the form stays in sync with the backend."
           },
           "event": [
             {
@@ -215,7 +209,7 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/upload",
-            "description": "Upload a PPTX/DOCX/PDF/XLSX file. Returns document_id saved as collection variable. Max 50 MB.",
+            "description": "Upload a PPTX/DOCX/PDF/XLSX file. Returns document_id saved as collection variable. Max 50 MB.\n\n🖥️ FRONTEND: Where: Create Project page, file picker. Send multipart `file`. Accept ONLY pdf/docx/doc/pptx/ppt/xlsx/xls (keep the <input accept> in sync). Save the returned `document_id` — you pass it to Extract Fields next.",
             "body": {
               "mode": "formdata",
               "formdata": [
@@ -250,7 +244,7 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/document/{{document_id}}",
-            "description": "Get full parsed document metadata. Uses document_id from Upload."
+            "description": "Get full parsed document metadata. Uses document_id from Upload.\n\n🖥️ FRONTEND: Where: after upload, to show a parse summary (text/images/tables counts). DB-first read; don't read parse data from the upload response."
           },
           "event": [
             {
@@ -268,7 +262,7 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/document/{{document_id}}/status",
-            "description": "Get lightweight document status (document_id, filename, file_type, status)."
+            "description": "Get lightweight document status (document_id, filename, file_type, status).\n\n🖥️ FRONTEND: Where: optional poll if you show a 'parsing…' state. Usually parse is synchronous, so you can skip this."
           },
           "event": [
             {
@@ -294,7 +288,7 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/extract-project-data",
-            "description": "AI Populate button. Reads uploaded document(s) and extracts all 15 project form fields. Takes 30–60 s. Returns extracted{} + missing_required[].",
+            "description": "AI Populate button. Reads uploaded document(s) and extracts all 15 project form fields. Takes 30–60 s. Returns extracted{} + missing_required[].\n\n🖥️ FRONTEND: Where: Create Project, right after Upload. AI reads the document and returns form field values. Slow (LLM) — show a spinner. Fields it filled should get the 'AI-filled' badge; clear the badge on user edit.",
             "header": [
               {
                 "key": "Content-Type",
@@ -327,7 +321,7 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/projects/draft",
-            "description": "Create a draft project without requiring all mandatory fields.\n\n**OPTIONAL: Pass project_id (client-generated UUID) for idempotency.**\nFrontend can call `crypto.randomUUID()` and include it in the body. On retry/autosave race, the same UUID returns 200 with the existing project — no duplicate created.\n\nReturns 409 if project_code is already used by another project.",
+            "description": "Create a draft project without requiring all mandatory fields.\n\n**OPTIONAL: Pass project_id (client-generated UUID) for idempotency.**\nFrontend can call `crypto.randomUUID()` and include it in the body. On retry/autosave race, the same UUID returns 200 with the existing project — no duplicate created.\n\nReturns 409 if project_code is already used by another project.\n\n🖥️ FRONTEND: Where: Create Project auto-save. Persist partial fields immediately (NO validation) so nothing is lost. Returns `id` only — re-read with Get Project. Idempotent: safe to call repeatedly (name+BU).",
             "header": [
               {
                 "key": "Content-Type",
@@ -365,7 +359,7 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/projects",
-            "description": "Save project to DB with full validation. All 12 marked fields required. Returns project_id.\n\n⚠️ Returns 422 if required fields missing. Returns 409 if project_code already in use.",
+            "description": "Save project to DB with full validation. All 12 marked fields required. Returns project_id.\n\n⚠️ Returns 422 if required fields missing. Returns 409 if project_code already in use.\n\n🖥️ FRONTEND: Where: alternative one-shot create when all required fields are present. Prefer Draft + Patch for the wizard.",
             "header": [
               {
                 "key": "Content-Type",
@@ -426,7 +420,7 @@
                 }
               ]
             },
-            "description": "List all projects (most recent first). Enable query params to filter by name/code or status."
+            "description": "List all projects (most recent first). Enable query params to filter by name/code or status.\n\n🖥️ FRONTEND: Where: Dashboard project grid. Supports filters (business_unit, review_status) + pagination (skip/limit)."
           },
           "event": [
             {
@@ -447,7 +441,7 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/projects/{{project_id}}",
-            "description": "Get full project including all fields, stakeholders, doc IDs, and lifecycle metadata."
+            "description": "Get full project including all fields, stakeholders, doc IDs, and lifecycle metadata.\n\n🖥️ FRONTEND: Where: Project page load. DB-first source of truth for the project object."
           },
           "event": [
             {
@@ -462,44 +456,11 @@
           ]
         },
         {
-          "name": "Update Project [DEPRECATED — use PATCH]",
-          "request": {
-            "method": "PUT",
-            "url": "{{base_url}}/projects/{{project_id}}",
-            "description": "⚠️ DEPRECATED — use PATCH /api/projects/{{project_id}} instead.\n\nPUT and PATCH do exactly the same thing (partial field update). PUT is kept for backwards compatibility but will be REMOVED in a future release.\n\nResponse includes X-Deprecated header and a 'deprecated' field in the JSON body.",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"business_priority\": \"Critical\",\n  \"estimated_cost_crores\": \"5.2\"\n}"
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "if (pm.response.code === 409) {",
-                  "  console.log('Project code conflict:', pm.response.json().error);",
-                  "} else {",
-                  "  pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "  pm.test('Has updated_at', () => pm.expect(pm.response.json()).to.have.property('updated_at'));",
-                  "}"
-                ]
-              }
-            }
-          ]
-        },
-        {
           "name": "Patch Project (PATCH — partial / autosave)",
           "request": {
             "method": "PATCH",
             "url": "{{base_url}}/projects/{{project_id}}",
-            "description": "Partial update — only the fields present in the body are written. Used for the frontend's autosave while filling the form.\n\n⚠️ Returns 409 if the new project_code is already in use by another project.",
+            "description": "Partial update — only the fields present in the body are written. Used for the frontend's autosave while filling the form.\n\n⚠️ Returns 409 if the new project_code is already in use by another project.\n\n🖥️ FRONTEND: Where: Create/Edit form autosave. Send only changed fields. Response returns ids/counts — re-read with Get Project, never render straight from the PATCH response.",
             "header": [
               {
                 "key": "Content-Type",
@@ -531,7 +492,7 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/projects/{{project_id}}/data",
-            "description": "Returns project meta at the top level (document_type, output_format, template_id, status) plus the 'ingested' form fields and 'derived' AI fields."
+            "description": "Returns project meta at the top level (document_type, output_format, template_id, status) plus the 'ingested' form fields and 'derived' AI fields.\n\n🖥️ FRONTEND: Where: Project → Data tab. Returns the two field groups (ingested + AI-derived). This is where the 12 derived fields appear after Derive runs."
           },
           "event": [
             {
@@ -554,7 +515,7 @@
           "request": {
             "method": "PUT",
             "url": "{{base_url}}/projects/{{project_id}}/data/ingested",
-            "description": "Save changes made to project ingested fields (from the project data page, Ingested tab).\n\n**BUG FIX:** `Content-Type: application/json` header is NOT required — the server parses JSON regardless. This was the root cause of the \"draft save not working\" report.\n\nSupported fields: project_name, business_unit, project_code, problem_statement, project_objective, as_is_processes, proposed_solution, technical_landscape, stakeholders, start_date, end_date, business_priority, constraints, risks, estimated_cost_crores.\n\nReturns 409 if `project_code` conflicts with another project.",
+            "description": "Save changes made to project ingested fields (from the project data page, Ingested tab).\n\n**BUG FIX:** `Content-Type: application/json` header is NOT required — the server parses JSON regardless. This was the root cause of the \"draft save not working\" report.\n\nSupported fields: project_name, business_unit, project_code, problem_statement, project_objective, as_is_processes, proposed_solution, technical_landscape, stakeholders, start_date, end_date, business_priority, constraints, risks, estimated_cost_crores.\n\nReturns 409 if `project_code` conflicts with another project.\n\n🖥️ FRONTEND: Where: Data tab, ingested fields save button.",
             "header": [
               {
                 "key": "Content-Type",
@@ -587,7 +548,7 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/projects/{{project_id}}/derive-fields",
-            "description": "AI generates all 12 derived fields from project data + attached documents. Takes 30–90 s. Call GET /projects/{id}/data afterwards to read the results.",
+            "description": "AI generates all 12 derived fields from project data + attached documents. Takes 30–90 s. Call GET /projects/{id}/data afterwards to read the results.\n\n🖥️ FRONTEND: Where: Project → Data tab, 'Derive with AI' button. Fills the 12 derived fields (pain_points, opportunities, …). Slow (LLM) — spinner. Then re-read Get Project Data.",
             "header": [
               {
                 "key": "Content-Type",
@@ -629,7 +590,7 @@
                 "validate"
               ]
             },
-            "description": "Pre-flight check before enabling the Generate button.\n\nChecks all required fields are filled without starting generation.\n\nRequired fields: project_name, problem_statement, project_objective, as_is_processes, proposed_solution, technical_landscape.\n\nReturns:\n  valid: true|false\n  ready_to_generate: true|false\n  missing_required: [...field names...]\n  message: human-readable summary"
+            "description": "Pre-flight check before enabling the Generate button.\n\nChecks all required fields are filled without starting generation.\n\nRequired fields: project_name, problem_statement, project_objective, as_is_processes, proposed_solution, technical_landscape.\n\nReturns:\n  valid: true|false\n  ready_to_generate: true|false\n  missing_required: [...field names...]\n  message: human-readable summary\n\n🖥️ FRONTEND: Where: gate BEFORE enabling the Generate button — tells you which required inputs are missing so you can block generation and highlight gaps."
           },
           "event": [
             {
@@ -652,7 +613,7 @@
           "request": {
             "method": "PUT",
             "url": "{{base_url}}/projects/{{project_id}}/data/derived",
-            "description": "Save manual changes to AI-derived fields (from the project data page, Derived tab).\n\n**BUG FIX:** `Content-Type: application/json` header is NOT required.\n\nSupported fields: current_challenges, to_be_process, success_criteria, business_requirements, functional_requirements, non_functional_requirements, industry_benchmarks, workflow, analytics_requirements, systems_involved, data_sources, constraints_dependencies.\n\nPass `\"mark_as_generated\": true` to set `derived_generated_at` timestamp.",
+            "description": "Save manual changes to AI-derived fields (from the project data page, Derived tab).\n\n**BUG FIX:** `Content-Type: application/json` header is NOT required.\n\nSupported fields: current_challenges, to_be_process, success_criteria, business_requirements, functional_requirements, non_functional_requirements, industry_benchmarks, workflow, analytics_requirements, systems_involved, data_sources, constraints_dependencies.\n\nPass `\"mark_as_generated\": true` to set `derived_generated_at` timestamp.\n\n🖥️ FRONTEND: Where: Data tab, derived fields save button.",
             "header": [
               {
                 "key": "Content-Type",
@@ -681,7 +642,7 @@
           "request": {
             "method": "DELETE",
             "url": "{{base_url}}/projects/{{project_id}}",
-            "description": "Permanently delete a project and its derived data. Returns 204 No Content."
+            "description": "Permanently delete a project and its derived data. Returns 204 No Content.\n\n🖥️ FRONTEND: Where: Dashboard/Project overflow menu. Confirm in UI first."
           },
           "event": [
             {
@@ -716,7 +677,7 @@
                 }
               ]
             },
-            "description": "Exact project_code lookup — resolves a human-readable code to the UUID project_id.\n\nUse when you have the code (e.g. from a shared link or URL) but need the UUID for subsequent API calls.\n\nExample: GET /api/projects?code=AESL-001\n\nReturns { projects[], count }. Check projects[0].project_id for the UUID."
+            "description": "Exact project_code lookup — resolves a human-readable code to the UUID project_id.\n\nUse when you have the code (e.g. from a shared link or URL) but need the UUID for subsequent API calls.\n\nExample: GET /api/projects?code=AESL-001\n\nReturns { projects[], count }. Check projects[0].project_id for the UUID.\n\n🖥️ FRONTEND: Where: quick-find by code. Exact match only, not fuzzy search."
           },
           "event": [
             {
@@ -746,7 +707,7 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/generate/project/{{project_id}}",
-            "description": "Start generation from a saved project. Body may override the type via \"document_type\" (defaults to the project's stored type). Supported: BRD, RFP, SOW, Proposal, Technical Specification, Scope, NDPR, NFA, NIT, BOQ, ARB — case-insensitive; long form e.g. 'Request for Proposal (RFP)' also works. Each type generates its OWN sections/formatting from its template.",
+            "description": "Start generation from a saved project. Body may override the type via \"document_type\" (defaults to the project's stored type). Supported: BRD, RFP, SOW, Proposal, Technical Specification, Scope, NDPR, NFA, NIT, BOQ, ARB — case-insensitive; long form e.g. 'Request for Proposal (RFP)' also works. Each type generates its OWN sections/formatting from its template.\n\n🖥️ FRONTEND: Where: Project → Generation tab, 'Generate' button. Returns a `job_id` IMMEDIATELY (async). Store it, then poll (or open the SSE stream). Do NOT block the UI on this call.",
             "header": [
               {
                 "key": "Content-Type",
@@ -782,41 +743,11 @@
           ]
         },
         {
-          "name": "Start Generation (Legacy) [DEPRECATED]",
-          "request": {
-            "method": "POST",
-            "url": "{{base_url}}/generate/start",
-            "description": "⚠️ DEPRECATED — use POST /api/generate/project/{{project_id}} instead.\n\nThis legacy endpoint requires a raw document_id and bypasses the project database. Use POST /api/generate/project/{{project_id}} which reads all project context from DB.\n\nResponse includes X-Deprecated header and a 'deprecated' field in the JSON body.",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"document_id\": \"{{document_id}}\",\n  \"user_inputs\": {\n    \"project_name\": \"Smart Meter Analytics\",\n    \"document_type\": \"{{document_type}}\",\n    \"output_format\": \"Word (.docx)\",\n    \"stakeholders\": \"Ravi Kumar (PM), Priya Sharma (BA)\",\n    \"project_description\": \"IoT smart meter analytics platform for AESL.\",\n    \"business_problem\": \"Manual meter reading is costly and error-prone.\",\n    \"expected_outcome\": \"Real-time meter data with automated billing.\"\n  }\n}"
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
-                  "const json = pm.response.json();",
-                  "if (json.job_id) pm.collectionVariables.set('job_id', json.job_id);"
-                ]
-              }
-            }
-          ]
-        },
-        {
           "name": "Poll Job Status",
           "request": {
             "method": "GET",
             "url": "{{base_url}}/generate/{{job_id}}",
-            "description": "Poll every 3 s to track progress. Check section statuses: pending → generating → completed/failed. Also saves the first section_id for use in section endpoints."
+            "description": "Poll every 3 s to track progress. Check section statuses: pending → generating → completed/failed. Also saves the first section_id for use in section endpoints.\n\n🖥️ FRONTEND: Where: Generation tab progress. THIS is the ONLY job-status endpoint — GET /generate/{job_id}. There is NO /status sub-route (a 404 there is the classic mistake). Read `status` + completed_sections/total_sections from the object. Poll ~1–2s until status==completed, OR use the SSE stream instead."
           },
           "event": [
             {
@@ -842,7 +773,7 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/generate/{{job_id}}/section/{{section_id}}",
-            "description": "Get a single section with all versions and all comments."
+            "description": "Get a single section with all versions and all comments.\n\n🖥️ FRONTEND: Where: Preview/section view — read one section's current content after an edit/regenerate (DB-first)."
           },
           "event": [
             {
@@ -862,7 +793,7 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/generate/{{job_id}}/section/{{section_id}}/comment",
-            "description": "Add a user review comment to a section. Save the returned comment_id for use in Regenerate.",
+            "description": "Add a user review comment to a section. Save the returned comment_id for use in Regenerate.\n\n🖥️ FRONTEND: Where: section comment box. Creates an edit_request; returns `comment_id`. For an AI edit you can now skip this and pass `instruction` straight to Regenerate.",
             "header": [
               {
                 "key": "Content-Type",
@@ -891,11 +822,11 @@
           ]
         },
         {
-          "name": "Regenerate Section (with comment)",
+          "name": "Regenerate Section (inline instruction ✅ or comment_id)",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/generate/{{job_id}}/section/{{section_id}}/regenerate",
-            "description": "Regenerate section incorporating the comment. Creates a new version. Omit comment_id to regenerate from scratch.",
+            "description": "Regenerate section incorporating the comment. Creates a new version. Omit comment_id to regenerate from scratch.\n\n🖥️ FRONTEND: Where: section 'Update with AI' action. ✅ SIMPLEST: POST with body {\"instruction\":\"<what to change>\"} — one stateless call, revises the section IN LIGHT OF the user's input (keeps existing content). Also accepts {\"comment_id\":\"…\"} (legacy). With an EMPTY body it regenerates from scratch (ignores input) — so always send `instruction` for an edit. After it returns, re-read the section/preview.",
             "header": [
               {
                 "key": "Content-Type",
@@ -904,7 +835,12 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"comment_id\": \"{{comment_id}}\"\n}"
+              "raw": "{\n  \"instruction\": \"Make this section more concise and add a cost breakdown table.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           },
           "event": [
@@ -926,7 +862,7 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/generate/{{job_id}}/section/{{section_id}}/accept",
-            "description": "Accept a specific version. This version will be used in the final export.",
+            "description": "Accept a specific version. This version will be used in the final export.\n\n🖥️ FRONTEND: Where: 'Accept' button on a version — marks a version as the accepted one.",
             "header": [
               {
                 "key": "Content-Type",
@@ -977,7 +913,7 @@
           "request": {
             "method": "PATCH",
             "url": "{{base_url}}/generate/{{job_id}}/section/{{section_id}}",
-            "description": "Manually overwrite a section with new Markdown content.\n\nCreates a new SectionVersion (`trigger_type: manual_edit`), marks it `is_accepted: true`, updates the version_hash cache, and invalidates the LibreOffice preview cache.\n\nThis is the endpoint called when the user edits a section inline in the document preview or via the sidebar drawer.\n\nResponse: `{ version: { version_number, content, trigger_type, word_count, ... }, message }` ",
+            "description": "Manually overwrite a section with new Markdown content.\n\nCreates a new SectionVersion (`trigger_type: manual_edit`), marks it `is_accepted: true`, updates the version_hash cache, and invalidates the LibreOffice preview cache.\n\nThis is the endpoint called when the user edits a section inline in the document preview or via the sidebar drawer.\n\nResponse: `{ version: { version_number, content, trigger_type, word_count, ... }, message }`\n\n🖥️ FRONTEND: Where: inline editor when the user TYPES the final text themselves. PATCH with {\"content\":\"…\"} stores it verbatim as a new version. Use this (not Regenerate) for manual edits.",
             "header": [
               {
                 "key": "Content-Type",
@@ -1014,7 +950,7 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/generate/{{job_id}}/preview",
-            "description": "Return the assembled document as markdown for on-screen rendering in the Chat UI.\n\n**Local dev:** `blob_url` is null — use the `export_urls.docx` path to download.\n**Azure (prod):** `blob_url` is populated after the first export call — use it to open/embed the DOCX directly from Azure Blob Storage.\n\nResponse: `{ job_id, status, document_type, project_name, sections[], markdown, export_urls, blob_url }`\n\n- `markdown` — full assembled document string, render with marked.js or similar\n- `sections[]` — individual sections with title, content, status, word_count\n- `export_urls` — relative paths for DOCX / PDF / Markdown download\n- `blob_url` — Azure Blob URL (prod only, null in local dev)"
+            "description": "Return the assembled document as markdown for on-screen rendering in the Chat UI.\n\n**Local dev:** `blob_url` is null — use the `export_urls.docx` path to download.\n**Azure (prod):** `blob_url` is populated after the first export call — use it to open/embed the DOCX directly from Azure Blob Storage.\n\nResponse: `{ job_id, status, document_type, project_name, sections[], markdown, export_urls, blob_url }`\n\n- `markdown` — full assembled document string, render with marked.js or similar\n- `sections[]` — individual sections with title, content, status, word_count\n- `export_urls` — relative paths for DOCX / PDF / Markdown download\n- `blob_url` — Azure Blob URL (prod only, null in local dev)\n\n🖥️ FRONTEND: Where: Preview tab — returns assembled markdown for on-screen rendering."
           },
           "event": [
             {
@@ -1058,7 +994,7 @@
                 }
               ]
             },
-            "description": "Download the assembled document. Change format= to pdf or md if needed."
+            "description": "Download the assembled document. Change format= to pdf or md if needed.\n\n🖥️ FRONTEND: Where: Export button. GET with ?format=docx|pdf|md. Trigger a file download from the response."
           },
           "event": [
             {
@@ -1071,6 +1007,77 @@
               }
             }
           ]
+        },
+        {
+          "name": "Save Manual HTML Edit (whole doc)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-User-Email",
+                "value": "{{user_email}}"
+              },
+              {
+                "key": "X-User-Name",
+                "value": "{{user_name}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/generate/{{job_id}}/preview/save",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "generate",
+                "{{job_id}}",
+                "preview",
+                "save"
+              ]
+            },
+            "description": "Manual whole-document edit. Frontend sends ONLY the edited preview HTML; backend stores it verbatim as a new VERSION (author = X-User-Name), reports changed_sections, and makes it the live preview.\n\n🖥️ FRONTEND: on Save in the HTML preview, POST the full edited HTML here. Then re-GET /preview/html to show it. Live preview serves this HTML until a section is AI-regenerated.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"html\": \"<!DOCTYPE html><html><body>...edited preview HTML...</body></html>\",\n  \"label\": \"my edit\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Get Version (with HTML)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-Email",
+                "value": "{{user_email}}"
+              },
+              {
+                "key": "X-User-Name",
+                "value": "{{user_name}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/generate/{{job_id}}/snapshot/{{snapshot_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "generate",
+                "{{job_id}}",
+                "snapshot",
+                "{{snapshot_id}}"
+              ]
+            },
+            "description": "Load one saved version INCLUDING its html_content — use to view/restore an old edited-HTML version.\n\n🖥️ FRONTEND: version-history \"open\" action; render the returned html_content."
+          }
         }
       ]
     },
@@ -1083,7 +1090,7 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/generate/{{job_id}}/preview/html",
-            "description": "Get the rendered HTML preview. ASYNCHRONOUS: may return {\"status\":\"pending\", \"poll_url\":\"...\", \"retry_after_ms\":1500}. Keep re-GETting poll_url (this same endpoint in sync mode, or /preview/status?task_id=... in Celery mode) until {\"status\":\"ready\", \"html\":...}. Do NOT treat 'pending' as an error."
+            "description": "Get the rendered HTML preview. ASYNCHRONOUS: may return {\"status\":\"pending\", \"poll_url\":\"...\", \"retry_after_ms\":1500}. Keep re-GETting poll_url (this same endpoint in sync mode, or /preview/status?task_id=... in Celery mode) until {\"status\":\"ready\", \"html\":...}. Do NOT treat 'pending' as an error.\n\n🖥️ FRONTEND: Where: Preview tab (Word-styled). Kicks off LibreOffice conversion; may return a task to poll."
           },
           "event": [
             {
@@ -1102,45 +1109,6 @@
               }
             }
           ]
-        },
-        {
-          "name": "Poll HTML Preview Status",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/generate/{{job_id}}/preview/status?task_id={{preview_task_id}}",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "generate",
-                "{{job_id}}",
-                "preview",
-                "status"
-              ],
-              "query": [
-                {
-                  "key": "task_id",
-                  "value": "{{preview_task_id}}"
-                }
-              ]
-            },
-            "description": "Poll Celery task status for HTML preview conversion.\n\nResponse: `{ status: 'pending' | 'ready' | 'error', html?, error? }`\n\nRepeat every 2s until `status === 'ready'`. The `html` field contains the full LibreOffice HTML with inline-editing scripts injected."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "const json = pm.response.json();",
-                  "console.log('Task status:', json.status);",
-                  "if (json.status === 'ready') console.log('Preview ready. HTML length:', json.html.length);",
-                  "if (json.status === 'error') console.error('Preview error:', json.error);"
-                ]
-              }
-            }
-          ]
         }
       ]
     },
@@ -1153,7 +1121,7 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/generate/{{job_id}}/snapshot",
-            "description": "Create a DocumentSnapshot capturing the current accepted (or latest) version of every section.\n\nReturns `{ snapshot_id, label, section_count, created_at }`.\n\nUse `label` to describe what this snapshot represents (e.g. 'After legal review', 'Pre-client review v1').",
+            "description": "Create a DocumentSnapshot capturing the current accepted (or latest) version of every section.\n\nReturns `{ snapshot_id, label, section_count, created_at }`.\n\nUse `label` to describe what this snapshot represents (e.g. 'After legal review', 'Pre-client review v1').\n\n🖥️ FRONTEND: Where: 'Save Version' — checkpoints all current section versions so you can restore later.",
             "header": [
               {
                 "key": "Content-Type",
@@ -1193,7 +1161,7 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/generate/{{job_id}}/snapshots",
-            "description": "List all snapshots for a job, most recent first.\n\nResponse: `{ snapshots: [{ snapshot_id, label, trigger_type, created_at, section_count }], total }`"
+            "description": "List all snapshots for a job, most recent first.\n\nResponse: `{ snapshots: [{ snapshot_id, label, trigger_type, created_at, section_count }], total }`\n\n🖥️ FRONTEND: Where: version history dropdown."
           },
           "event": [
             {
@@ -1215,7 +1183,7 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/generate/{{job_id}}/snapshot/{{snapshot_id}}/restore",
-            "description": "Restore a document to a saved snapshot.\n\nMarks the referenced SectionVersion for each section as `is_accepted=true`, clears the accepted flag on other versions, and invalidates the preview cache.\n\nResponse: `{ restored_sections: [{ section_id, version_number }], snapshot_id }`",
+            "description": "Restore a document to a saved snapshot.\n\nMarks the referenced SectionVersion for each section as `is_accepted=true`, clears the accepted flag on other versions, and invalidates the preview cache.\n\nResponse: `{ restored_sections: [{ section_id, version_number }], snapshot_id }`\n\n🖥️ FRONTEND: Where: 'Restore' on a snapshot — rolls the document back. Re-read the job/sections after.",
             "header": [
               {
                 "key": "Content-Type",
@@ -1355,7 +1323,7 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/chat/init",
-            "description": "Create/resume a chat session. \"document_type\" selects the type (short or long form). Supported: BRD, RFP, SOW, Proposal, Technical Specification, Scope, NDPR, NFA, NIT, BOQ, ARB — case-insensitive; long form e.g. 'Request for Proposal (RFP)' also works.",
+            "description": "Create/resume a chat session. \"document_type\" selects the type (short or long form). Supported: BRD, RFP, SOW, Proposal, Technical Specification, Scope, NDPR, NFA, NIT, BOQ, ARB — case-insensitive; long form e.g. 'Request for Proposal (RFP)' also works.\n\n🖥️ FRONTEND: Where: opening the Chat studio. Returns a `session_id` — STORE IT and reuse it on EVERY message. If project_id is omitted a draft project is auto-created (use auto_created_project_id).",
             "header": [
               {
                 "key": "Content-Type",
@@ -1395,7 +1363,7 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/chat/message",
-            "description": "Send a user message and receive an assistant response.\n\nThe assistant classifies intent and routes to the right action:\n- 'generate the document' → triggers generation\n- 'regenerate introduction' → regenerates a section\n- 'I want to change the tone' → adds a comment and regenerates\n- general questions → answered directly",
+            "description": "Send a user message and receive an assistant response.\n\nThe assistant classifies intent and routes to the right action:\n- 'generate the document' → triggers generation\n- 'regenerate introduction' → regenerates a section\n- 'I want to change the tone' → adds a comment and regenerates\n- general questions → answered directly\n\n🖥️ FRONTEND: Where: chat input box. ALWAYS send the same `session_id`. Section EDIT is TWO steps: (1) send the instruction → you get action='confirm_modify'; (2) send 'yes' → action='section_modified'. If you lose the session_id or skip the 'yes', the edit never applies. `job_id` comes back at the top level — poll it via Poll Job Status.",
             "header": [
               {
                 "key": "Content-Type",
@@ -1429,7 +1397,7 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/chat/{{session_id}}/history",
-            "description": "Return the full ChatSession record including all messages, project_id, job_id, and current phase."
+            "description": "Return the full ChatSession record including all messages, project_id, job_id, and current phase.\n\n🖥️ FRONTEND: Where: restoring the chat panel on reload — returns the message history for the session."
           },
           "event": [
             {
@@ -1453,7 +1421,7 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/chat/{{session_id}}/upload",
-            "description": "Upload a document from the chat UI. Parses the file, attaches it to the session's project, and returns a chat-style confirmation response.",
+            "description": "Upload a document from the chat UI. Parses the file, attaches it to the session's project, and returns a chat-style confirmation response.\n\n🖥️ FRONTEND: Where: attach-file in chat. Same session_id.",
             "body": {
               "mode": "formdata",
               "formdata": [
@@ -1493,7 +1461,8 @@
           "name": "STEP 1 — Health Check",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/health"
+            "url": "{{base_url}}/health",
+            "description": "Full-flow step 1: confirm the API is up."
           },
           "event": [
             {
@@ -1519,7 +1488,8 @@
                   "type": "file"
                 }
               ]
-            }
+            },
+            "description": "Full-flow step 2: upload a source file; saves document_id."
           },
           "event": [
             {
@@ -1547,7 +1517,8 @@
             "body": {
               "mode": "raw",
               "raw": "{ \"document_ids\": [\"{{document_id}}\"] }"
-            }
+            },
+            "description": "Full-flow step 3: AI extracts form fields from the uploaded document."
           },
           "event": [
             {
@@ -1617,7 +1588,8 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"project_objective\": \"Automate meter data collection with real-time analytics.\",\n  \"stakeholders\": [{ \"name\": \"Srinivas Gutta\", \"designation\": \"Project Manager\" }],\n  \"start_date\": \"2025-04-01\",\n  \"end_date\": \"2025-12-31\",\n  \"as_is_processes\": \"Field engineers visit each meter monthly for manual reading.\",\n  \"proposed_solution\": \"Deploy IoT smart meters with a central analytics platform.\",\n  \"technical_landscape\": \"Azure IoT Hub, Power BI, SAP ERP integration.\",\n  \"business_priority\": \"Critical\",\n  \"document_type\": \"{{document_type}}\",\n  \"output_format\": \"Word (.docx)\",\n  \"status\": \"ready\"\n}"
-            }
+            },
+            "description": "Full-flow step 4: fill remaining fields + set document_type."
           },
           "event": [
             {
@@ -1698,7 +1670,8 @@
           "name": "7. Poll Generation Status",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/generate/{{job_id}}"
+            "url": "{{base_url}}/generate/{{job_id}}",
+            "description": "Full-flow step 7: poll GET /generate/{job_id} until status==completed."
           },
           "event": [
             {
@@ -1750,7 +1723,8 @@
           "name": "9. Export Document (DOCX)",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/generate/{{job_id}}/export?format=docx"
+            "url": "{{base_url}}/generate/{{job_id}}/export?format=docx",
+            "description": "Full-flow step 9: download the final document (?format=docx)."
           },
           "event": [
             {
@@ -1858,7 +1832,7 @@
                 "{{user_id}}"
               ]
             },
-            "description": ""
+            "description": "Delete a user by id. Confirm in UI first."
           }
         }
       ]
@@ -1993,7 +1967,7 @@
                 "{{persona_id}}"
               ]
             },
-            "description": ""
+            "description": "Delete a reviewer persona by id."
           }
         }
       ]
@@ -2031,7 +2005,7 @@
                 "share"
               ]
             },
-            "description": "Author shares a generated document. Sets job review_status=under_review. Save review_id from the response.",
+            "description": "Author shares a generated document. Sets job review_status=under_review. Save review_id from the response.\n\n🖥️ FRONTEND: Where: 'Share' in Review workspace. Creates a review + notifies recipients. Identity via X-User-Email/X-User-Name headers.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"job_id\": \"{{job_id}}\",\n  \"message\": \"Please review by Friday\",\n  \"reviewers\": [\n    {\n      \"email\": \"srinivas@adani.com\",\n      \"name\": \"Srinivas Gutta\",\n      \"role\": \"Project Manager\"\n    },\n    {\n      \"email\": \"ali@adani.com\",\n      \"name\": \"Ali Imam\",\n      \"role\": \"Technical Lead\"\n    }\n  ]\n}"
@@ -2064,7 +2038,7 @@
                 "sent"
               ]
             },
-            "description": "Reviews the caller requested — reviewers with statuses (shared/reviewing/accepted/rejected/revision_requested), comment counts, days since shared."
+            "description": "Reviews the caller requested — reviewers with statuses (shared/reviewing/accepted/rejected/revision_requested), comment counts, days since shared.\n\n🖥️ FRONTEND: Where: Review dashboard, 'Sent' tab."
           }
         },
         {
@@ -2093,7 +2067,7 @@
                 "received"
               ]
             },
-            "description": "Documents shared WITH the caller, including who shared and my_status."
+            "description": "Documents shared WITH the caller, including who shared and my_status.\n\n🖥️ FRONTEND: Where: Review dashboard, 'Received' tab + notification bell count."
           }
         },
         {
@@ -2122,7 +2096,7 @@
                 "{{review_id}}"
               ]
             },
-            "description": "Everything for the review screen: meta, reviewers, document sections (for anchoring), threaded comments, cached AI summaries. Opening as a reviewer flips shared→reviewing."
+            "description": "Everything for the review screen: meta, reviewers, document sections (for anchoring), threaded comments, cached AI summaries. Opening as a reviewer flips shared→reviewing.\n\n🖥️ FRONTEND: Where: full-page Review workspace load — the review object with comments."
           }
         },
         {
@@ -2156,7 +2130,7 @@
                 "comments"
               ]
             },
-            "description": "section_id optional (document-level if omitted). For replies pass parent_id.",
+            "description": "section_id optional (document-level if omitted). For replies pass parent_id.\n\n🖥️ FRONTEND: Where: reviewer comment box (threaded).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"text\": \"Budget allocation needs more clarity\",\n  \"section_id\": \"{{section_id}}\"\n}"
@@ -2194,7 +2168,7 @@
                 "comments"
               ]
             },
-            "description": "",
+            "description": "Post a threaded reply to an existing review comment.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"text\": \"Good catch \\u2014 updating now\",\n  \"parent_id\": \"{{review_comment_id}}\"\n}"
@@ -2300,7 +2274,7 @@
                 "ai-review"
               ]
             },
-            "description": "Returns {summary, section_comments:[{section_id, section_title, comment}]}. NOT persisted — reviewer picks what to keep.",
+            "description": "Returns {summary, section_comments:[{section_id, section_title, comment}]}. NOT persisted — reviewer picks what to keep.\n\n🖥️ FRONTEND: Where: 'AI Review' button — runs the 5 personas; slow (LLM), show progress.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"persona\": \"Technical Reviewer\",\n  \"instructions\": \"Focus on integration risks\"\n}"
@@ -2377,7 +2351,7 @@
                 "summarize"
               ]
             },
-            "description": "Author: persona-wise AI summaries of ALL reviewer comments. Cached.",
+            "description": "Author: persona-wise AI summaries of ALL reviewer comments. Cached.\n\n🖥️ FRONTEND: Where: 'Summarize' — condenses all comments; cached by fingerprint (pass force to recompute).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"personas\": [\n    \"Project Manager\",\n    \"Technical Reviewer\",\n    \"Business Analyst\"\n  ]\n}"
@@ -2445,7 +2419,7 @@
                 "respond"
               ]
             },
-            "description": "accepted | rejected | revision_requested. Rolls up job review_status: any rejected→rejected, any revision→revision_requested, all accepted→approved.",
+            "description": "accepted | rejected | revision_requested. Rolls up job review_status: any rejected→rejected, any revision→revision_requested, all accepted→approved.\n\n🖥️ FRONTEND: Where: approve/reject action — drives the project review rollup on the dashboard.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"action\": \"accepted\"\n}"
@@ -2514,7 +2488,7 @@
                 "apply"
               ]
             },
-            "description": "Author: converts the review comment into the standard section-regeneration flow → new SectionVersion. section_id only needed for un-anchored comments.",
+            "description": "Author: converts the review comment into the standard section-regeneration flow → new SectionVersion. section_id only needed for un-anchored comments.\n\n🖥️ FRONTEND: Where: 'Apply' on a review comment — regenerates the target section from that comment.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"section_id\": \"{{section_id}}\"\n}"

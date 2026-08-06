@@ -131,6 +131,7 @@ def generate_section(
     target_words:         int = 300,
     edit_comment:         Optional[str] = None,
     previous_content:     Optional[str] = None,
+    section_spec:         Optional[dict] = None,
 ) -> tuple[str, str, str]:
     """
     Generate (or regenerate) a single section using the LLM.
@@ -169,8 +170,11 @@ def generate_section(
 
     # Enrich the section prompt with per-section guidance from the Adani mapping document.
     # Falls back gracefully (empty string) if the section or doc type isn't in the mapping.
+    # The section's spec (scope boundary / columns / depth / source fields) now
+    # travels inside the template section (single source of truth). The caller
+    # passes it as section_spec; build_section_guidance turns it into the block.
     from generation.section_mapping import build_section_guidance
-    mapping_guidance = build_section_guidance(document_type, section_title)
+    mapping_guidance = build_section_guidance(section_spec)
     mapping_guidance_block = f"{mapping_guidance}\n\n" if mapping_guidance else ""
 
     if edit_comment and previous_content:

@@ -46,11 +46,25 @@ logger = logging.getLogger(__name__)
 # Default true = background thread, HTTP call returns immediately.
 ASYNC_GENERATION = os.environ.get("ASYNC_GENERATION", "true").lower() == "true"
 
+# GENERATION_BACKEND selects HOW _run_generation_job executes:
+#   thread  — in-process daemon thread (default; historical behaviour, NOT durable:
+#             a server restart orphans in-flight jobs → main.py startup sweep fails them)
+#   celery  — enqueue to a Celery worker (DURABLE: the job survives an API restart,
+#             and a worker crash re-queues it — task_acks_late in celery_app.py)
+#   sync    — run inline inside the HTTP request (debugging / tiny documents)
+# Back-compat: when GENERATION_BACKEND is unset we derive it from ASYNC_GENERATION
+# (true→thread, false→sync), so existing deployments are byte-for-byte unchanged
+# until they opt in to the queue.
+_DEFAULT_BACKEND   = "thread" if ASYNC_GENERATION else "sync"
+GENERATION_BACKEND = os.environ.get("GENERATION_BACKEND", _DEFAULT_BACKEND).strip().lower()
+
 # How many sections to generate CONCURRENTLY within a wave. Sections only see a
 # 150-char preview of prior sections (see generator._build_section_prompt), so
 # wave-parallelism is quality-neutral while cutting wall-clock ~concurrency-fold.
-# Set to 1 to restore strictly sequential generation.
-GENERATION_CONCURRENCY = max(1, int(os.environ.get("GENERATION_CONCURRENCY", "4")))
+# Default raised 4→6 to offset the richer, more granular section lists compiled
+# from the expert mapping document. Tune up to 8 for very large docs (watch Vertex
+# 429s — llm_provider retries them). Set to 1 to restore sequential generation.
+GENERATION_CONCURRENCY = max(1, int(os.environ.get("GENERATION_CONCURRENCY", "6")))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -117,18 +131,9 @@ def start_job(
 
     logger.info("Created job %s with %d sections", job_id, len(section_configs))
 
-    if ASYNC_GENERATION:
-        # Launch background thread — returns immediately
-        t = threading.Thread(
-            target=_run_generation_job,
-            args=(job_id,),
-            daemon=True,
-            name=f"gen-{job_id[:8]}",
-        )
-        t.start()
-    else:
-        # Synchronous — blocks until all sections are done
-        _run_generation_job(job_id)
+    ran_sync = _dispatch_generation(job_id)
+    if ran_sync:
+        # Synchronous backend ran to completion inside this call — return fresh state.
         with get_session() as session:
             job_obj = session.get(GenerationJob, job_id)
             job_dict = job_obj.to_dict()
@@ -136,9 +141,124 @@ def start_job(
     return job_dict
 
 
+def _dispatch_generation(job_id: str) -> bool:
+    """Kick off generation for a freshly-created job using GENERATION_BACKEND.
+
+    Returns True iff generation ran SYNCHRONOUSLY (inline) and the caller should
+    re-read the job to get its final state; False for the async backends
+    (celery / thread) where the job continues in the background.
+
+    The job row is already committed as "pending" before this is called, so a
+    dispatch failure never loses the job — main.py's startup sweep reaps any
+    job left pending past STALE_JOB_MINUTES.
+    """
+    backend = GENERATION_BACKEND
+
+    if backend == "celery":
+        try:
+            from generation.tasks import generate_document_task
+            generate_document_task.delay(job_id)
+            logger.info("[gen] Job %s enqueued to Celery (queue durable)", job_id)
+            return False
+        except Exception:
+            # Broker unreachable / misconfigured. Don't strand the job — fall back
+            # to an in-process thread so generation still proceeds (degraded: not
+            # durable). Logged at CRITICAL so the broker outage is visible.
+            logger.critical(
+                "[gen] Celery enqueue FAILED for job %s — falling back to in-process "
+                "thread (NOT durable). Check CELERY_BROKER_URL and broker health.",
+                job_id, exc_info=True,
+            )
+            backend = "thread"
+
+    if backend == "subprocess":
+        # Run the job in its OWN OS process (mirrors a Databricks Job run locally).
+        # Section-level parallelism still happens inside the child via the wave loop.
+        _spawn_job_process(job_id)
+        return False
+
+    if backend == "sync":
+        _run_generation_job(job_id)
+        return True
+
+    # Default: in-process daemon thread — returns immediately.
+    t = threading.Thread(
+        target=_run_generation_job,
+        args=(job_id,),
+        daemon=True,
+        name=f"gen-{job_id[:8]}",
+    )
+    t.start()
+    return False
+
+
+def _spawn_job_process(job_id: str) -> None:
+    """Launch `python -m generation.job_runner <job_id>` as a detached child
+    process. This mirrors Approach B (Databricks Job) locally: the job body runs
+    in a SEPARATE process, yet the wave loop inside _run_generation_job still
+    generates GENERATION_CONCURRENCY (default 4) sections in parallel.
+
+    A daemon reaper thread only waits on the child to log its exit and avoid
+    zombies — it does NO generation work itself. If the spawn fails (e.g. a bad
+    interpreter path), it falls back to running the job in-process so generation
+    still proceeds.
+
+    NOTE (local SQLite only): the child is a second process writing the SQLite
+    file. That is WAL-safe here (WAL supports multi-process readers + one writer;
+    db.py sets busy_timeout + synchronous=NORMAL and section writes use
+    retry_on_locked), but it is a different concurrency profile than the thread
+    backend. In production (Databricks SQL Warehouse) there is no such caveat.
+    """
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    app_dir = Path(__file__).parent.parent.resolve()   # …/Data_Ingestion (has the `generation` package)
+    cmd = [sys.executable, "-m", "generation.job_runner", job_id]
+
+    def _run() -> None:
+        try:
+            proc = subprocess.Popen(cmd, cwd=str(app_dir))
+            logger.info("[gen] Job %s dispatched to subprocess pid=%s", job_id, proc.pid)
+            rc = proc.wait()
+            logger.info("[gen] Subprocess job %s (pid=%s) exited rc=%s", job_id, proc.pid, rc)
+        except Exception:
+            logger.critical(
+                "[gen] Subprocess spawn FAILED for job %s — running in-process instead.",
+                job_id, exc_info=True,
+            )
+            _run_generation_job(job_id)
+
+    t = threading.Thread(target=_run, daemon=True, name=f"gen-proc-{job_id[:8]}")
+    t.start()
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Background generation loop
 # ─────────────────────────────────────────────────────────────────────────────
+
+def _fill_placeholders(text: str, user_inputs: dict) -> str:
+    """Substitute {{placeholder}} tokens in static section content with the
+    project's field values. Used for STATIC sections (NIT boilerplate / forms)
+    so the reused text carries THIS project's name, NIT number, dates, contacts.
+    Unknown/empty tokens become a visible fill-in blank so nothing looks broken.
+    """
+    import re
+    if not text:
+        return ""
+    ctx = dict(user_inputs or {})
+    # Sensible NIT defaults so common tokens resolve even if a field is unset.
+    ctx.setdefault("client_name",  "Adani Electricity Mumbai Limited (AEML)")
+    ctx.setdefault("organisation", "Adani Electricity Mumbai Limited (AEML)")
+    ctx.setdefault("purchaser",    "Adani Electricity Mumbai Limited (AEML)")
+
+    def _repl(m: "re.Match") -> str:
+        key = m.group(1).strip()
+        val = ctx.get(key)
+        return str(val) if val not in (None, "") else "__________"
+
+    return re.sub(r"\{\{\s*([\w.]+)\s*\}\}", _repl, text)
+
 
 @retry_on_locked()
 def _persist_section_version(job_id: str, section_id: str, content: str,
@@ -164,7 +284,7 @@ def _persist_section_version(job_id: str, section_id: str, content: str,
         ))
         sec.status          = "completed"
         sec.current_version = 1
-        sec.version_hash    = _hm.md5(f"{section_id}:1".encode(), usedforsecurity=False).hexdigest()[:16]
+        sec.version_hash    = _hm.sha256(f"{section_id}:1".encode(), usedforsecurity=False).hexdigest()[:16]
         sec.updated_at      = datetime.utcnow()
         # Atomic increment — safe under concurrent wave workers
         session.query(GenerationJob).filter(GenerationJob.job_id == job_id).update(
@@ -250,6 +370,18 @@ def _run_generation_job(job_id: str) -> None:
             sec.updated_at = datetime.utcnow()
             session.commit()
 
+        # ── STATIC sections: skip the LLM entirely ───────────────────────────
+        # A section with mode="static" (e.g. NIT legal boilerplate / forms) is
+        # NOT generated — its `static_content` is inserted verbatim, with
+        # {{placeholders}} filled from the project fields. Deterministic, exact,
+        # and legally safe. It still lands as a normal SectionVersion so preview /
+        # download / manual + AI edit / versioning all work the same.
+        if cfg.get("mode") == "static":
+            content = _fill_placeholders(cfg.get("static_content", ""), user_inputs)
+            _persist_section_version(job_id, section_id, content, "(static content)", "static")
+            logger.info("[gen] Section '%s' inserted STATIC (%d words)", section_key, len(content.split()))
+            return {"title": section_title, "content": content, "order": order_index}
+
         try:
             content, prompt, model_id = generate_section(
                 section_key          = section_key,
@@ -261,7 +393,37 @@ def _run_generation_job(job_id: str) -> None:
                 user_inputs          = user_inputs,
                 previous_sections    = prev_snapshot,
                 target_words         = target_words,
+                section_spec         = cfg,
             )
+
+            # Short-table guard: table sections sometimes come back far too brief
+            # (the model stops after a few rows — e.g. an FR table with 3 of 40 rows).
+            # Retry ONCE with a stronger nudge when a TABLE section is well under its
+            # target. Bounded (one extra call), and only for real table sections with
+            # a meaningful length target — composites ("mixed") never trigger this.
+            w1 = len(content.split())
+            _rh = (cfg.get("render_hint") or "").lower()
+            _is_table = _rh == "table" or "table" in str(cfg.get("format", "")).lower()
+            if _is_table and target_words >= 400 and w1 < 0.4 * target_words:
+                try:
+                    boosted = instructions + (
+                        f"\n\nIMPORTANT: the previous draft was far too brief. Output the FULL "
+                        f"table with ALL rows requested (aim for ~{target_words} words). Every row "
+                        f"must fill every column. Do not summarise, truncate, or write 'see above'."
+                    )
+                    c2, p2, m2 = generate_section(
+                        section_key=section_key, section_title=section_title,
+                        section_instructions=boosted, document_type=document_type,
+                        system_instructions=system_instructions, llm_context=llm_context,
+                        user_inputs=user_inputs, previous_sections=prev_snapshot,
+                        target_words=target_words, section_spec=cfg,
+                    )
+                    if len(c2.split()) > w1:
+                        logger.info("[gen] Section '%s' short-table retry %d→%d words",
+                                    section_key, w1, len(c2.split()))
+                        content, prompt, model_id = c2, p2, m2
+                except Exception:
+                    logger.warning("[gen] Section '%s' short-table retry failed — keeping first draft", section_key)
 
             # Persist in a lock-retrying write (the LLM call above is NOT retried)
             _persist_section_version(job_id, section_id, content, prompt, model_id)
@@ -294,6 +456,11 @@ def _run_generation_job(job_id: str) -> None:
     for wave_start in range(0, len(section_rows), GENERATION_CONCURRENCY):
         wave = section_rows[wave_start:wave_start + GENERATION_CONCURRENCY]
         prev_snapshot = list(previous_sections)   # immutable view for this wave
+        logger.info(
+            "[gen] Job %s — wave %d: generating %d section(s) IN PARALLEL: %s",
+            job_id, wave_start // GENERATION_CONCURRENCY + 1, len(wave),
+            ", ".join(r[2] for r in wave),   # r[2] = section_title
+        )
         if len(wave) == 1:
             results = [_generate_one(wave[0], prev_snapshot)]
         else:
@@ -332,6 +499,7 @@ def _run_generation_job(job_id: str) -> None:
                 user_inputs          = user_inputs,
                 previous_sections    = previous_sections,
                 target_words         = target_words,
+                section_spec         = cfg,
             )
             import hashlib as _hm
             with get_session() as session:
@@ -349,7 +517,7 @@ def _run_generation_job(job_id: str) -> None:
                 ))
                 sec.status          = "completed"
                 sec.current_version = new_ver
-                sec.version_hash    = _hm.md5(f"{section_id}:{new_ver}".encode(), usedforsecurity=False).hexdigest()[:16]
+                sec.version_hash    = _hm.sha256(f"{section_id}:{new_ver}".encode(), usedforsecurity=False).hexdigest()[:16]
                 sec.updated_at      = datetime.utcnow()
                 # Do NOT increment completed_sections here — it was already counted
                 # when the section failed in the main loop above.
@@ -612,6 +780,7 @@ def regenerate_section(
             user_inputs          = user_inputs,
             previous_sections    = prev_sections,
             target_words         = target_words,
+            section_spec         = cfg,
             edit_comment         = edit_comment,
             previous_content     = current_content,
         )
@@ -634,7 +803,7 @@ def regenerate_section(
             sec.status          = "completed"
             sec.current_version = next_version
             import hashlib as _hm
-            sec.version_hash    = _hm.md5(f"{section_id}:{next_version}".encode(), usedforsecurity=False).hexdigest()[:16]
+            sec.version_hash    = _hm.sha256(f"{section_id}:{next_version}".encode(), usedforsecurity=False).hexdigest()[:16]
             sec.updated_at      = datetime.utcnow()
 
             # Mark the triggering comment as addressed
@@ -645,7 +814,19 @@ def regenerate_section(
 
             session.commit()
             session.refresh(ver)
-            return ver.to_dict()
+            _result = ver.to_dict()
+
+        # Bust the LibreOffice HTML preview cache so the NEXT /preview/html
+        # re-renders with the regenerated content. Without this the DB has the
+        # new version but /preview/html keeps serving the OLD cached HTML — the
+        # reason chatbot/AI edits "don't show up in the doc HTML". Manual edits
+        # (update_section_content) already do this; regenerate must too.
+        try:
+            from generation.preview_service import invalidate_preview_cache
+            invalidate_preview_cache(job_id)
+        except Exception:
+            pass  # non-fatal — preview will still re-render on a later cache miss
+        return _result
 
     except Exception as e:
         with get_session() as session:
@@ -716,7 +897,7 @@ def update_section_content(section_id: str, content: str, edited_by: str = None)
         sec.current_version = next_version
         # Update version_hash for faster preview caching (avoids 50ms MD5 recalc)
         import hashlib as _hm
-        sec.version_hash = _hm.md5(f"{sec.section_id}:{next_version}".encode(), usedforsecurity=False).hexdigest()[:16]
+        sec.version_hash = _hm.sha256(f"{sec.section_id}:{next_version}".encode(), usedforsecurity=False).hexdigest()[:16]
         sec.updated_at      = datetime.utcnow()
         session.commit()
 
@@ -1142,6 +1323,82 @@ def list_snapshots(job_id: str) -> list[dict]:
         return [s.to_dict() for s in snaps]
 
 
+def get_snapshot(job_id: str, snapshot_id: str) -> dict:
+    """Return one snapshot INCLUDING its html_content — used to load an old
+    edited-HTML version for viewing/restoring."""
+    with get_session() as session:
+        snap = session.get(DocumentSnapshot, snapshot_id)
+        if not snap or snap.job_id != job_id:
+            raise ValueError(f"Snapshot {snapshot_id} not found for job {job_id}")
+        return snap.to_dict(include_html=True)
+
+
+def save_edited_html(
+    job_id:       str,
+    html:         str,
+    author_name:  Optional[str] = None,
+    author_email: Optional[str] = None,
+    label:        Optional[str] = None,
+) -> dict:
+    """
+    Save a WHOLE-DOCUMENT manual HTML edit as a new version (DocumentSnapshot,
+    trigger_type='manual_html'). Stores the edited HTML VERBATIM and attributes
+    it to the author. The live preview (/preview/html) then serves this HTML
+    until a section is AI-regenerated. Also reports which sections changed
+    (best-effort, informational — the HTML is stored as one blob).
+    """
+    import json
+    from generation.preview_service import detect_changed_sections, invalidate_preview_cache
+
+    # Which sections did the editor touch? (compared via section markers)
+    try:
+        changed = detect_changed_sections(job_id, html)
+    except Exception:
+        changed = []
+
+    with get_session() as session:
+        job = session.get(GenerationJob, job_id)
+        if not job:
+            raise ValueError(f"Job {job_id} not found")
+
+        # Snapshot the current section versions too, so this version is a full
+        # checkpoint (section_refs) alongside the raw edited HTML.
+        refs = []
+        for sec in sorted(job.sections, key=lambda x: x.order_index):
+            lv = sec.latest_version()
+            if lv:
+                refs.append({
+                    "section_id":     sec.section_id,
+                    "version_id":     lv.version_id,
+                    "version_number": lv.version_number,
+                    "section_title":  sec.section_title,
+                })
+
+        default_label = f"Edited by {author_name or author_email or 'user'} — {datetime.utcnow():%Y-%m-%d %H:%M} UTC"
+        snap = DocumentSnapshot(
+            snapshot_id  = str(uuid.uuid4()),
+            job_id       = job_id,
+            label        = (label or "").strip() or default_label,
+            trigger_type = "manual_html",
+            author       = author_name or author_email,
+            html_content = html,
+            section_refs = json.dumps(refs),
+        )
+        session.add(snap)
+        session.commit()
+        session.refresh(snap)
+        result = snap.to_dict()
+
+    # New manual HTML is now the live preview; drop any stale rendered cache.
+    try:
+        invalidate_preview_cache(job_id)
+    except Exception:
+        pass
+
+    result["changed_sections"] = changed
+    return result
+
+
 def restore_snapshot(job_id: str, snapshot_id: str) -> dict:
     """
     Restore a DocumentSnapshot: for each referenced section, mark the
@@ -1151,6 +1408,22 @@ def restore_snapshot(job_id: str, snapshot_id: str) -> dict:
     Invalidates the preview cache so the next preview re-converts.
     Returns {"restored_sections": [...section_ids...], "snapshot_id": "…"}.
     """
+    # A manual_html version restores by making its saved HTML current again —
+    # re-save it as a NEW manual_html snapshot so it becomes the newest (and thus
+    # the live preview). Keeps full history rather than mutating timestamps.
+    with get_session() as _s:
+        _snap = _s.get(DocumentSnapshot, snapshot_id)
+        if not _snap or _snap.job_id != job_id:
+            raise ValueError(f"Snapshot {snapshot_id} not found for job {job_id}")
+        _is_html = bool(_snap.trigger_type == "manual_html" and _snap.html_content)
+        _html    = _snap.html_content if _is_html else None
+        _author  = _snap.author if _is_html else None
+        _label   = _snap.label if _is_html else None
+    if _is_html:
+        new_snap = save_edited_html(job_id, _html, author_name=_author,
+                                    label=f"Restored: {_label}")
+        return {"restored_html_snapshot": new_snap["snapshot_id"], "snapshot_id": snapshot_id}
+
     with get_session() as session:
         snap = session.get(DocumentSnapshot, snapshot_id)
         if not snap or snap.job_id != job_id:

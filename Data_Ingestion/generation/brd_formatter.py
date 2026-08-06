@@ -18,14 +18,17 @@ from pathlib import Path
 from typing import Optional
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Adani brand colours (hex strings, no #)
+# Adani brand colours (hex strings, no #) — sourced from the shared style module
+# (generation/doc_style.py) so the Word download and the HTML preview stay in
+# lock-step. Values are unchanged; the .docx output is identical.
 # ─────────────────────────────────────────────────────────────────────────────
-_DARK_BLUE   = "1F3763"   # H3 text, table header fill
-_MID_BLUE    = "2E75B6"   # header rule line
-_LIGHT_BLUE  = "D6E4F7"   # table alt-row fill (unused by default, kept for future)
-_WHITE       = "FFFFFF"
-_BLACK       = "000000"
-_GRAY        = "595959"   # sub-text, footer
+from generation import doc_style as _style
+_DARK_BLUE   = _style.DARK_BLUE    # H3 text, table header fill
+_MID_BLUE    = _style.MID_BLUE     # header rule line
+_LIGHT_BLUE  = _style.LIGHT_BLUE   # table alt-row fill (unused by default, kept for future)
+_WHITE       = _style.WHITE
+_BLACK       = _style.BLACK
+_GRAY        = _style.GRAY          # sub-text, footer
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Document structure
@@ -136,10 +139,78 @@ def format_structured_docx(
     doc.save(str(out_path))
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# NIT — Section-I/II/III/X tender structure (like BRD_STRUCTURE, for NIT)
+# ─────────────────────────────────────────────────────────────────────────────
+# Maps the NIT parts to their section_keys (from templates/nit.json). Section-I
+# is AI-generated (4 subsections); the rest are static boilerplate whose own
+# markdown headings carry the sub-numbering, so we only add the top "Section-N"
+# heading here.
+NIT_PARTS = [
+    ("Section-I: Introduction",
+        ["intro_organization", "intro_data_context", "intro_ai_roadmap", "intro_purpose_objectives"]),
+    ("Section-II: Information To Bidder",          ["nit_name_of_work", "nit_project_details", "nit_eligibility"]),
+    ("Section-III: Instructions to Bidders (ITB)", ["instructions_to_bidders"]),
+    ("Section-X: Forms",                           ["forms"]),
+]
+# Titles for the Section-I subsections (numbered 1.1–1.4).
+_NIT_SUBTITLES = {
+    "intro_organization":       "1.1  About Adani Group, AESL & AEML",
+    "intro_data_context":       "1.2  Data, Analytics and Digital Transformation Context",
+    "intro_ai_roadmap":         "1.3  Enterprise Data & AI Roadmap (Indicative & Non-Binding)",
+    "intro_purpose_objectives": "1.4  Purpose and Objectives of the RFP",
+    "nit_name_of_work":         "2.1  Name of the Work",
+    "nit_project_details":      "2.2  Project Details and Contact Information",
+    "nit_eligibility":          "2.3  Eligibility & Qualification Criteria",
+}
+
+
+def format_nit_docx(
+    sections_by_key: dict[str, str],
+    project_name: str,
+    out_path: Path,
+    *,
+    client_name: str = "Adani Electricity Mumbai Limited (AEML)",
+    doc_version: str = "1.0",
+) -> None:
+    """Build a styled NIT/RFP tender document from section content, laid out in
+    the client's Section-I/II/III/X structure. Section-I subsections are numbered;
+    static sections render their own headings. Reuses the shared Adani styling
+    (cover, header/logo, footer, dark-blue tables) so it matches the BRD look.
+    """
+    from docx import Document
+
+    doc = Document()
+    _setup_page(doc)
+    _setup_styles(doc)
+    _add_header(doc, project_name, label="NIT")
+    _add_footer(doc)
+    _add_generic_cover(doc, "Notice Inviting Tender (NIT)", project_name, client_name, doc_version)
+
+    # Front matter (legal disclaimer, clarifications, abbreviations) — before Section-I.
+    front = (sections_by_key.get("front_disclaimer") or "").strip()
+    if front:
+        _render_brd_markdown(doc, front)
+        doc.add_page_break()
+
+    for heading, keys in NIT_PARTS:
+        doc.add_heading(heading, level=1)
+        for key in keys:
+            content = (sections_by_key.get(key) or "").strip()
+            if not content:
+                continue
+            subtitle = _NIT_SUBTITLES.get(key)
+            if subtitle:
+                doc.add_heading(subtitle, level=2)
+            _render_brd_markdown(doc, content)
+
+    doc.save(str(out_path))
+
+
 def _short_doc_label(doc_type: str) -> str:
     """Derive a short header label — the parenthesised abbreviation if present
     (e.g. 'Request for Proposal (RFP)' → 'RFP'), else the doc type itself."""
-    m = re.search(r"\(([A-Za-z]{2,6})\)", doc_type or "")
+    m = re.search(r"\(([A-Za-z]{2,6})\)", (doc_type or "")[:200])
     if m:
         return m.group(1).upper()
     return (doc_type or "Document").strip()
@@ -187,15 +258,23 @@ def _add_generic_cover(doc, doc_type: str, project_name: str,
 
     doc.add_paragraph()
 
+    # Cover / control metadata from the expert mapping (template_config sheet).
+    from generation.doc_meta import get_doc_meta
+    meta = get_doc_meta(doc_type)
+
     _add_cover_section_heading(doc, "Document Control")
-    ctrl = doc.add_table(rows=4, cols=2)
+    pairs = [("Document ID:", document_id)]
+    if meta.get("template_id"):
+        pairs.append(("Template ID:", meta["template_id"]))
+    pairs.append(("Client:", client_name))
+    if meta.get("classification"):
+        pairs.append(("Classification:", meta["classification"]))
+    if meta.get("document_status"):
+        pairs.append(("Status:", meta["document_status"]))
+    pairs += [("Version:", doc_version), ("Date:", today)]
+
+    ctrl = doc.add_table(rows=len(pairs), cols=2)
     ctrl.style = _safe_table_style(doc)
-    pairs = [
-        ("Document ID:", document_id),
-        ("Client:",      client_name),
-        ("Version:",     doc_version),
-        ("Date:",        today),
-    ]
     for i, (k, v) in enumerate(pairs):
         _set_cell_text(ctrl.rows[i].cells[0], k, bold=True, bg=_DARK_BLUE, fg=_WHITE)
         _set_cell_text(ctrl.rows[i].cells[1], v)
@@ -206,13 +285,23 @@ def _add_generic_cover(doc, doc_type: str, project_name: str,
     _add_cover_section_heading(doc, "Confidentiality")
     conf = doc.add_paragraph()
     cr = conf.add_run(
-        "This document contains restricted information pertaining to Adani. "
-        "The addressee should honour these access rights by preventing intentional "
-        "or accidental access outside the intended scope."
+        meta.get("confidentiality_text")
+        or ("This document contains restricted information pertaining to Adani. "
+            "The addressee should honour these access rights by preventing intentional "
+            "or accidental access outside the intended scope.")
     )
     cr.font.name = "Calibri"
     cr.font.size = Pt(10)
     cr.font.color.rgb = RGBColor(0x00, 0x00, 0x00)
+
+    if meta.get("disclaimer_text"):
+        doc.add_paragraph()
+        _add_cover_section_heading(doc, "Disclaimer")
+        dp = doc.add_paragraph()
+        dr = dp.add_run(meta["disclaimer_text"])
+        dr.font.name = "Calibri"
+        dr.font.size = Pt(10)
+        dr.font.color.rgb = RGBColor(0x00, 0x00, 0x00)
 
     doc.add_page_break()
 

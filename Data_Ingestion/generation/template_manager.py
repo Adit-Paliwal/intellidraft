@@ -62,7 +62,7 @@ def _resolve_template_id(document_type: Optional[str]) -> Optional[str]:
     """
     if not document_type:
         return None
-    raw = document_type.strip()
+    raw = document_type.strip()[:200]
     # 1. exact key
     if raw in _DOC_TYPE_MAP:
         return _DOC_TYPE_MAP[raw]

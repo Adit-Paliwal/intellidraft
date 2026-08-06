@@ -74,7 +74,7 @@ def _load() -> dict:
 
 def _norm_doc_type(document_type: str) -> str | None:
     """'Business Requirements Document (BRD)' / 'brd' / 'NFA' → ontology key."""
-    up = (document_type or "").upper()
+    up = (document_type or "").upper()[:200]
     for key in _DOC_KEYS:
         if re.search(rf"\b{key}\b", up):
             return key

@@ -17,7 +17,8 @@ python-docx==1.2.0          # Word DOCX
 python-pptx==1.0.2          # PowerPoint PPTX
 openpyxl==3.1.5             # Excel XLSX
 lxml==6.1.1                 # XML/HTML (used by DOCX image extraction)
-pillow==12.2.0              # Image handling (vision + export)
+xhtml2pdf==0.2.17           # PDF export (pure-Python HTML→PDF; replaces LibreOffice)
+pillow==12.3.0              # Image handling (vision + export)
 striprtf==0.0.26            # RTF parsing
 
 # ── Data / schema / config ───────────────────────────────────────────────────
@@ -41,7 +42,7 @@ pyarrow>=14.0.6                  # Required by databricks-sql-connector
 #  retired Vertex AI Agent Engine deployment; pip restores it automatically
 #  if google-adk requires it transitively.)
 google-adk==2.2.0
-litellm==1.83.14            # Gemini via litellm. SECURITY: 1.83.14 fixes CVE-2026-49468 (critical auth bypass) + 47101/47102/40217
+litellm==1.93.0            # Gemini via litellm. SECURITY: 1.93.0 — patches proxy host-header auth-bypass + user_role/guardrail CVEs (we use it as a library, not the proxy)
 openai==2.30.0              # Used by litellm internally
 google-genai==1.75.0        # Gemini SDK
 google-auth==2.53.0
@@ -58,8 +59,8 @@ protobuf==6.33.6
 requests==2.34.2
 httpx==0.28.1
 httpcore==1.0.9
-httplib2==0.31.2
-aiohttp==3.14.1            # SECURITY: 3.14.1 fixes CVE-2026-54273/54274/54276/54277/54278/54279/54280/47265/50269/34993
+httplib2==0.32.0
+aiohttp==3.14.3            # SECURITY: 3.14.3 fixes CVE-2026-54273/54274/54276/54277/54278/54279/54280/47265/50269/34993
 aiohappyeyeballs==2.6.2
 aiosignal==1.4.0
 frozenlist==1.8.0
@@ -91,6 +92,12 @@ click==8.1.8                # CLI dep of uvicorn
 # ── Document export / generation ─────────────────────────────────────────────
 markdown2==2.5.5            # Markdown → HTML
 xlsxwriter==3.2.9           # Excel export
+
+# ── Durable task queue (OPT-IN: only used when GENERATION_BACKEND=celery) ─────
+# Moves section generation off in-process threads onto a Celery worker so jobs
+# survive an API restart/crash. Inert unless a broker + worker are deployed.
+celery==5.4.0              # distributed task queue (generation/celery_app.py + tasks.py)
+redis==5.2.1               # broker + result backend client (Redis / Azure Cache for Redis)
 
 
 # ── Testing (dev/CI only — not needed at runtime) ────────────────────────────
@@ -145,19 +152,19 @@ requests-oauthlib==2.0.0
 Authlib==1.7.2
 joserfc==1.6.8             # SECURITY: 1.6.8 fixes CVE-2026-49852 (empty HMAC key) + CVE-2026-48990
 pyOpenSSL==26.2.0
-pyasn1==0.6.3
+pyasn1==0.6.4
 pyasn1_modules==0.4.2
 
 # ── Windows ──────────────────────────────────────────────────────────────────
 pywin32==311; sys_platform == "win32"   # Windows only — auto-skipped on Linux/GCP
 
 # ── Misc ─────────────────────────────────────────────────────────────────────
-setuptools==82.0.1
+setuptools==83.0.0
 opentelemetry-api==1.42.1
 opentelemetry-sdk==1.42.1
 opentelemetry-semantic-conventions==0.63b1
 isodate==0.7.2
 regex==2026.5.9
 beautifulsoup4==4.14.3
-soupsieve==2.8.3
-nltk==3.9.4                # CVE-2026-54293: only fixed in 3.10.0rc1 (pre-release). Transitive dep (llama-index); app never calls nltk.data.load() on untrusted input — accepted until a stable 3.10 ships.
+soupsieve==2.9.1
+nltk==3.10.0                # SECURITY: 3.10.0 fixes CVE-2026-54293 (path traversal in nltk.data.load). Transitive dep (llama-index).

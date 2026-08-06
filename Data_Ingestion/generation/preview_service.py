@@ -1,40 +1,27 @@
 """
 preview_service.py
 ==================
-Production-grade LibreOffice document preview for IntelliDraft.
+Document preview for IntelliDraft — pure-Python HTML, NO LibreOffice.
 
-How it works (synchronous — the Celery/Redis async path was retired with the
-Docker/Cloud Run deployment; Databricks Apps runs a single process)
+How it works (synchronous, single-renderer — LibreOffice was removed
+2026-07-17 so local and Databricks produce identical output)
 ------------------------------------------------------------------
 1. Client calls GET /api/generate/{job_id}/preview/html
-2. In-memory cache hit → return HTML immediately
-3. Cache miss → convert DOCX→HTML via LibreOffice headless in the request
-   thread (unique -env:UserInstallation per conversion so parallel requests
-   don't hit profile locks); falls back to a markdown2 renderer when
-   LibreOffice is not installed (e.g. on Databricks).
-4. Any PATCH to a section calls invalidate_preview_cache(job_id) so the next
-   request re-converts.
-
-NOTE: the React SPA renders previews client-side from section markdown; this
-endpoint chiefly serves the legacy chat.html preview panel.
+2. If a whole-document manual HTML edit exists (and is newer than every section),
+   it is served as-is (see _latest_manual_html).
+3. Otherwise the document is rendered to HTML by render_document_html() — markdown2
+   per section, styled to MATCH the Word download via generation/doc_style.py, with
+   <section data-section-id> markers for inline/whole-document editing.
+4. Any section edit/regenerate calls invalidate_preview_cache(job_id).
 """
 from __future__ import annotations
 
-import base64
-import hashlib
 import logging
 import os
-import re
-import shutil
-import subprocess
-import tempfile
 import threading
-import uuid
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
-
-LO_TIMEOUT = int(os.environ.get("LO_CONVERT_TIMEOUT", "90"))    # seconds
 
 # ── In-process deduplication state ───────────────────────────────────────────
 # Prevents multiple simultaneous conversions for the same job regardless of
@@ -70,14 +57,65 @@ def pregenerate_preview(job_id: str) -> None:
     t.start()
 
 
+def _latest_manual_html(job_id: str) -> "str | None":
+    """Return the newest manual_html snapshot's HTML — but only if no section has
+    been regenerated/edited AFTER it was saved. Once a section changes, the
+    manual HTML is stale and we fall back to re-rendering from the section
+    content. Returns None when there is no current manual HTML."""
+    from generation.db import DocumentSnapshot, Section, get_session as _gs
+    from sqlalchemy import func
+    try:
+        with _gs() as s:
+            snap = (
+                s.query(DocumentSnapshot)
+                .filter(
+                    DocumentSnapshot.job_id == job_id,
+                    DocumentSnapshot.trigger_type == "manual_html",
+                    DocumentSnapshot.html_content.isnot(None),
+                )
+                .order_by(DocumentSnapshot.created_at.desc())
+                .first()
+            )
+            if not snap:
+                return None
+            latest_sec = (
+                s.query(func.max(Section.updated_at))
+                .filter(Section.job_id == job_id)
+                .scalar()
+            )
+            if latest_sec and snap.created_at and latest_sec > snap.created_at:
+                return None   # a section changed after this edit → stale
+            return snap.html_content
+    except Exception:
+        return None
+
+
 def get_or_submit_preview(job_id: str) -> dict:
     """
     Returns one of:
       {"status": "ready",   "html": "<html>…", "cached": bool}
       {"status": "pending", "task_id": "…",    "poll_url": "…"}
       {"status": "error",   "error": "…"}
+
+    A whole-document MANUAL HTML edit (saved via /preview/save) takes precedence
+    and is served as-is, until a section is AI-regenerated after it.
+
+    NOTE: LibreOffice was removed from the preview path (2026-07-17). The preview
+    is ALWAYS rendered by render_document_html() — styled to match the .docx via
+    generation/doc_style.py — so local and Databricks produce identical output.
     """
-    return _sync_preview(job_id)
+    manual = _latest_manual_html(job_id)
+    if manual is not None:
+        return {"status": "ready", "html": manual, "cached": False, "renderer": "manual_html"}
+    try:
+        html = render_document_html(job_id)
+        html = _inject_section_handlers(html, job_id)
+        return {"status": "ready", "html": html, "cached": False, "renderer": "html"}
+    except ValueError as e:
+        return {"status": "error", "error": str(e)}
+    except Exception as e:
+        logger.exception("[preview] render failed for job %s", job_id)
+        return {"status": "error", "error": str(e)}
 
 
 def poll_preview_status(job_id: str, task_id: str) -> dict:
@@ -109,250 +147,130 @@ def invalidate_preview_cache(job_id: str) -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Core conversion — LibreOffice headless DOCX→HTML
-# ─────────────────────────────────────────────────────────────────────────────
-
-def convert_job_to_html(job_id: str) -> str:
-    """
-    Export job sections as DOCX and convert to self-contained HTML via LibreOffice.
-    Each call uses a unique LO user-profile directory so multiple conversions
-    can run in parallel without lock conflicts.
-
-    Returns the HTML string (CSS and small images are inlined).
-    Raises on any failure — the caller falls back to the markdown2 renderer.
-    """
-    from generation.doc_writer import export_job_to_temp
-
-    with tempfile.TemporaryDirectory(prefix="intellidraft_preview_") as work_dir:
-        work_path = Path(work_dir)
-
-        # 1. Write DOCX to the temp directory
-        docx_path = export_job_to_temp(job_id, work_path)
-        logger.info("[preview] Exported DOCX for job %s → %s", job_id, docx_path.name)
-
-        # 2. Unique LibreOffice user profile — enables parallel execution
-        lo_profile = work_path / f"lo_profile_{uuid.uuid4().hex}"
-        lo_profile.mkdir()
-
-        # 3. Run LibreOffice headless conversion
-        soffice = _find_soffice()
-        cmd = [
-            soffice,
-            f"-env:UserInstallation=file:///{lo_profile.as_posix()}",
-            "--headless",
-            "--norestore",
-            "--convert-to", "html:HTML (StarWriter)",
-            "--outdir", str(work_path),
-            str(docx_path),
-        ]
-        logger.debug("[preview] Running: %s", " ".join(cmd))
-        result = subprocess.run(
-            cmd,
-            timeout=LO_TIMEOUT,
-            capture_output=True,
-            text=True,
-        )
-
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"LibreOffice exited with code {result.returncode}. "
-                f"stderr: {result.stderr[:600]}"
-            )
-
-        # 4. Find the HTML output file
-        html_files = list(work_path.glob("*.html"))
-        if not html_files:
-            raise RuntimeError(
-                f"LibreOffice produced no HTML. "
-                f"stdout: {result.stdout[:300]} stderr: {result.stderr[:300]}"
-            )
-
-        raw_html = html_files[0].read_text(encoding="utf-8", errors="replace")
-        logger.info(
-            "[preview] Converted %s → HTML (%d bytes)", docx_path.name, len(raw_html)
-        )
-
-        # 5. Inline external assets (LO may produce a companion .css and image files)
-        return _inline_assets(raw_html, work_path)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Internal helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _sync_preview(job_id: str) -> dict:
-    """
-    Local-dev fallback: try LibreOffice; fall back to markdown2 HTML if LO is absent.
-
-    Deduplication (sync mode):
-      - If HTML is already cached in _preview_cache → return immediately (no conversion).
-      - If a conversion is already running (flag == "sync") → return pending so the
-        caller retries; they will hit the cache once the running conversion finishes.
-      - Otherwise → set the flag, run the conversion, cache the result, clear the flag.
-    """
-    # ── Cache hit ─────────────────────────────────────────────────────────────
-    with _inflight_lock:
-        cached = _preview_cache.get(job_id)
-        if cached:
-            return {"status": "ready", "html": cached, "cached": True}
-
-        # ── Another thread is already converting → tell caller to retry ──────
-        # Return an explicit poll_url + retry hint so ANY client (React, etc.)
-        # knows to re-GET the same /preview/html endpoint until status=="ready".
-        # (Sync mode has no Celery task_id — the poll target is the html endpoint.)
-        if _inflight.get(job_id) == "sync":
-            return {
-                "status":         "pending",
-                "cached":         False,
-                "poll_url":       f"/api/generate/{job_id}/preview/html",
-                "retry_after_ms": 1500,
-            }
-
-        # ── Claim the conversion slot ─────────────────────────────────────────
-        _inflight[job_id] = "sync"
-
-    try:
-        html = convert_job_to_html(job_id)
-        html = _inject_section_handlers(html, job_id)
-        with _inflight_lock:
-            _preview_cache[job_id] = html
-        return {"status": "ready", "html": html, "cached": False}
-    except EnvironmentError:
-        # LibreOffice not installed — render via markdown2 instead
-        result = _markdown2_preview(job_id)
-        if result.get("status") == "ready":
-            with _inflight_lock:
-                _preview_cache[job_id] = result["html"]
-        return result
-    except Exception as e:
-        logger.exception("[preview] Sync conversion failed for job %s", job_id)
-        try:
-            result = _markdown2_preview(job_id)
-            if result.get("status") == "ready":
-                with _inflight_lock:
-                    _preview_cache[job_id] = result["html"]
-            return result
-        except Exception:
-            return {"status": "error", "error": str(e)}
-    finally:
-        with _inflight_lock:
-            if _inflight.get(job_id) == "sync":
-                _inflight.pop(job_id, None)
+# CSS comes from the shared style module so the preview matches the Word download.
+def _preview_css() -> str:
+    from generation.doc_style import preview_css
+    return preview_css()
 
 
-def _markdown2_preview(job_id: str) -> dict:
-    """
-    Convert the assembled document markdown to HTML using markdown2.
-    No LibreOffice or Celery required — works everywhere.
-    Activated automatically when LibreOffice is not installed.
-    """
-    try:
-        import markdown2
-        from generation.doc_writer import assemble_preview
-        preview = assemble_preview(job_id)
-        md      = preview.get("markdown", "")
-        body    = markdown2.markdown(
-            md,
-            extras=["tables", "fenced-code-blocks", "break-on-newline", "strike"],
-        )
-        html = (
-            "<!DOCTYPE html><html><head><meta charset='utf-8'>"
-            "<style>"
-            "body{font-family:Arial,sans-serif;max-width:900px;margin:40px auto;"
-            "padding:0 24px;line-height:1.65;color:#1a1a2e;}"
-            "h1{font-size:22px;border-bottom:2px solid #5c6bc0;padding-bottom:8px;margin-bottom:18px;}"
-            "h2{font-size:18px;color:#3f51b5;margin-top:32px;margin-bottom:10px;}"
-            "h3{font-size:15px;color:#283593;margin-top:22px;}"
-            "p{margin:8px 0;}"
-            "table{border-collapse:collapse;width:100%;margin:14px 0;}"
-            "th,td{border:1px solid #c5cae9;padding:8px 12px;text-align:left;}"
-            "th{background:#e8eaf6;font-weight:600;}"
-            "code{background:#f5f5f5;padding:2px 5px;border-radius:3px;font-size:12.5px;}"
-            "hr{border:none;border-top:1px solid #e0e0e0;margin:20px 0;}"
-            "blockquote{border-left:3px solid #5c6bc0;margin:0;padding:4px 16px;color:#555;}"
-            "ul,ol{padding-left:22px;}li{margin:3px 0;}"
-            "</style></head><body>"
-            + body
-            + "</body></html>"
-        )
-        html = _inject_section_handlers(html, job_id)
-        return {"status": "ready", "html": html, "cached": False, "renderer": "markdown2"}
-    except Exception as e:
-        logger.exception("[preview] markdown2 fallback failed for job %s", job_id)
-        return {"status": "error", "error": str(e)}
+def _current_sections(job_id: str) -> list[dict]:
+    """Return [{section_id, title, markdown}] for the job's CURRENT section
+    versions, in document order. Empty list if the job/sections are missing."""
+    from generation.db import GenerationJob, get_session as _gs
+    out: list[dict] = []
+    with _gs() as s:
+        job = s.get(GenerationJob, job_id)
+        if not job:
+            return out
+        for sec in sorted(job.sections, key=lambda x: x.order_index):
+            latest = sec.latest_version()
+            out.append({
+                "section_id": sec.section_id,
+                "title":      sec.section_title,
+                "markdown":   (latest.content if latest else "") or "",
+            })
+    return out
 
 
-def _inline_assets(html: str, work_dir: Path) -> str:
-    """
-    Make the HTML self-contained:
-    - Replace linked <link rel=stylesheet> with inline <style>
-    - Replace img src="…" for small files (<1 MB) with base64 data URIs
-    """
-    # Inline linked stylesheets
-    def _replace_css(m):
-        href = m.group(1)
-        css_path = work_dir / href
-        if css_path.exists():
-            css = css_path.read_text(encoding="utf-8", errors="replace")
-            return f"<style>{css}</style>"
-        return m.group(0)
-
-    html = re.sub(
-        r'<link[^>]+href=["\']([^"\']+\.css)["\'][^>]*/?>', _replace_css, html, flags=re.IGNORECASE
+def _render_section_body(md: str) -> str:
+    """Markdown → HTML for a single section's body (no wrapper)."""
+    import markdown2
+    return markdown2.markdown(
+        md or "", extras=["tables", "fenced-code-blocks", "break-on-newline", "strike"],
     )
 
-    # Inline small images as base64 data URIs
-    def _replace_img(m):
-        src = m.group(1)
-        img_path = work_dir / src
-        if img_path.exists() and img_path.stat().st_size < 1_048_576:
-            ext  = img_path.suffix.lstrip(".").lower()
-            mime = {
-                "png":  "image/png",
-                "jpg":  "image/jpeg",
-                "jpeg": "image/jpeg",
-                "gif":  "image/gif",
-                "svg":  "image/svg+xml",
-                "bmp":  "image/bmp",
-            }.get(ext, "image/png")
-            b64 = base64.b64encode(img_path.read_bytes()).decode()
-            return f'src="data:{mime};base64,{b64}"'
-        return m.group(0)
 
-    html = re.sub(
-        r'src=["\']([^"\']+\.(png|jpg|jpeg|gif|svg|bmp))["\']',
-        _replace_img, html, flags=re.IGNORECASE
+def render_document_html(job_id: str) -> str:
+    """Build the full preview HTML — styled to MATCH the Word download
+    (generation/doc_style.py) — with each section wrapped in a
+    <section data-section-id data-section-title> marker so the whole-document
+    HTML editor can split it back into sections on save.
+
+    Sections are numbered "N. Title" at the top level to mirror the .docx.
+    This is the ONLY preview renderer (no LibreOffice) so local == Databricks.
+    """
+    from datetime import datetime
+    from generation.db import GenerationJob, get_session as _gs
+    from generation.doc_writer import _extract_project_name
+
+    with _gs() as s:
+        job = s.get(GenerationJob, job_id)
+        doc_type = (job.document_type if job else "") or "Document"
+        project  = _extract_project_name(job.user_inputs_json if job else None)
+
+    # Cover / header block — mirrors the .docx cover + document-control meta line.
+    # Control metadata (template ID / status / classification / confidentiality)
+    # comes from the SAME shared loader the .docx cover uses, so they never drift.
+    from generation.doc_meta import get_doc_meta
+    meta = get_doc_meta(doc_type)
+    ctrl = " &nbsp;·&nbsp; ".join(
+        f"<strong>{label}:</strong> {meta[k]}"
+        for label, k in (("Template ID", "template_id"),
+                         ("Status", "document_status"),
+                         ("Classification", "classification"))
+        if meta.get(k)
     )
-
-    return html
-
-
-def _find_soffice() -> str:
-    """
-    Locate the LibreOffice soffice binary across common installation paths.
-    Raises EnvironmentError with setup instructions if not found.
-    """
-    candidates = [
-        "soffice",                                                # on PATH (Linux Docker)
-        "/usr/bin/soffice",
-        "/usr/lib/libreoffice/program/soffice",
-        "/opt/libreoffice7.6/program/soffice",
-        "/opt/libreoffice/program/soffice",
-        r"C:\Program Files\LibreOffice\program\soffice.exe",     # Windows default
-        r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
-        "/Applications/LibreOffice.app/Contents/MacOS/soffice",  # macOS
+    parts = [
+        '<div class="id-header">',
+        f'<div class="id-title">{doc_type}</div>',
+        f'<div class="id-meta"><strong>Project:</strong> {project} &nbsp;·&nbsp; '
+        f'<strong>Generated:</strong> {datetime.utcnow():%Y-%m-%d %H:%M} UTC</div>',
     ]
-    for c in candidates:
-        found = shutil.which(c)
-        if found:
-            return found
-        if os.path.isfile(c):
-            return c
-
-    raise EnvironmentError(
-        "LibreOffice (soffice) not found — install it and add it to PATH, "
-        "or rely on the built-in markdown2 preview fallback."
+    if ctrl:
+        parts.append(f'<div class="id-meta">{ctrl}</div>')
+    if meta.get("confidentiality_text"):
+        parts.append(f'<div class="id-meta" style="font-style:italic">{meta["confidentiality_text"]}</div>')
+    parts.append('</div>')
+    for i, sec in enumerate(_current_sections(job_id), start=1):
+        body = _render_section_body(sec["markdown"])
+        title_attr = sec["title"].replace('"', "&quot;")
+        parts.append(
+            f'<section data-section-id="{sec["section_id"]}" '
+            f'data-section-title="{title_attr}">\n'
+            f'<h2>{i}. {sec["title"]}</h2>\n{body}\n</section>'
+        )
+    return (
+        "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+        f"<style>{_preview_css()}</style></head><body>"
+        + "\n".join(parts)
+        + "</body></html>"
     )
+
+
+def split_sections_from_html(html: str) -> dict:
+    """Parse edited HTML → {section_id: normalized_inner_html} using the
+    <section data-section-id> markers. Returns {} if no markers are present."""
+    try:
+        from bs4 import BeautifulSoup
+    except Exception:
+        return {}
+    out: dict[str, str] = {}
+    soup = BeautifulSoup(html or "", "html.parser")
+    for sec in soup.find_all("section", attrs={"data-section-id": True}):
+        sid = sec.get("data-section-id")
+        # normalize whitespace so trivial reflow isn't counted as an edit
+        inner = "".join(str(c) for c in sec.contents)
+        out[sid] = " ".join(inner.split())
+    return out
+
+
+def detect_changed_sections(job_id: str, submitted_html: str) -> list[dict]:
+    """Compare the submitted (edited) HTML against the freshly-rendered current
+    HTML, per section marker, and return [{section_id, title}] for the sections
+    whose content differs. Best-effort: [] if markers are absent on either side."""
+    current = split_sections_from_html(render_document_html(job_id))
+    edited  = split_sections_from_html(submitted_html)
+    if not current or not edited:
+        return []
+    titles = {s["section_id"]: s["title"] for s in _current_sections(job_id)}
+    changed = []
+    for sid, edited_inner in edited.items():
+        if sid in current and current[sid] != edited_inner:
+            changed.append({"section_id": sid, "section_title": titles.get(sid, "")})
+    return changed
 
 
 # ─────────────────────────────────────────────────────────────────────────────

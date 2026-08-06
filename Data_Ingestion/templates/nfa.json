@@ -2,88 +2,24 @@
   "id": "nfa",
   "name": "Note for Approval",
   "document_type": "Note for Approval (NFA)",
-  "description": "Formal NFA (Note for Approval / eNFA) following the Adani approval workflow format. Compact executive approval document with a structured header, summary, background, detailed justification, capability listing, benefits, and financial proposal. Used to seek management/board approval for CAPEX schemes.",
-  "system_instructions": "You are a senior program manager writing a formal Note for Approval (NFA / eNFA) for an Adani group capital expenditure scheme. This document is presented to management and board-level approvers. Write in crisp, executive-level language — precise, factual, and direct. Avoid long paragraphs; prefer structured bullets and clear statements. Use Indian financial conventions: costs in Rs. Crs. (crores) with GST stated separately, e.g., '₹12.1 Cr + GST'. Quantify benefits wherever possible ('60% faster model deployment', '100% KPI standardization'). Each section must be grounded in facts from the source documents — do not invent figures. The tone must convey confidence and strategic clarity appropriate for a senior leadership approval forum.",
+  "description": "Note for Approval — compiled from the expert mapping document (mapping_source.xlsx). Sections, depth, table columns and scope boundaries are authoritative from that source.",
+  "system_instructions": "You are a senior business analyst writing a formal Note for Approval for Adani Energy Solutions Limited (AESL). Professional, precise, third-person business English. Be specific — pull real names, numbers, systems, dates and figures from the source material; never use vague placeholders. Each section must ADD new information — do not repeat content from other sections. Honour the 'MUST NOT INCLUDE' scope boundary supplied with each section. For table sections output a valid GitHub-flavoured Markdown pipe table with a header row and a separator row, using EXACTLY the columns named in the section spec. Do not use emoji.",
   "sections": [
     {
-      "key": "nfa_basic_details",
-      "title": "NFA Basic Details",
+      "key": "s1_note_for_approval",
+      "title": "Note for Approval",
       "order": 1,
       "render_hint": "table",
-      "instructions": "Generate the NFA header/basic details as a two-column markdown pipe table. Each row is one field:\n\n| Field | Details |\n|-------|--------|\n| NFA No | [Leave blank — auto-assigned] |\n| Subject | [Full project title] |\n| Location | [City / Organisation-wide] |\n| Company | [Full legal entity name, e.g., Adani Energy Solutions Limited] |\n| BU / Category | [Business unit code, e.g., AESL] |\n| NFA Type | [e.g., Others-Others or Infrastructure] |\n| NFA Sub Type | [e.g., Others-Others] |\n| NFA Amount | [e.g., 12.1 Cr] |\n| Department | [e.g., ENER Digital] |\n| Project / Plant | [e.g., AESL / AEML-T / AEML-D] |\n\nExtract all details from the source documents. Leave NFA No blank.",
-      "target_words": 120
+      "instructions": "Render the NFA as ONE 2-column markdown table with header 'Field | Value'. Include EXACTLY these rows in order: NFA No; Subject; Location; Company; BU/Category; NFA Type; NFA Sub Type; NFA Amount; Department; Project/Plant; NFA Summary; NFA Background; NFA Details; NFA Proposal. Rules: the first 10 fields take SHORT values (Subject = a one-line approval statement; Company/BU from project; leave 'NFA No' blank if not provided; do NOT invent values). The last 4 fields take FULL content written as a SINGLE flowing paragraph per cell (no line breaks, no '|' characters inside a cell): NFA Summary = 3-4 sentence executive summary of what is proposed, why, cost and the approval ask; NFA Background = 'Current challenges: ... Proposed Approach: ...' in one paragraph; NFA Details = the detailed need, platform capabilities, scope and quantified benefits; NFA Proposal = start with 'Approval is sought to incur CAPEX/OPEX amounting to Rs. XX Cr + GST for ...' and end with 'Put up for your approval please.'. Produce ~800 words total.",
+      "target_words": 800
     },
     {
-      "key": "nfa_summary",
-      "title": "NFA Summary",
-      "order": 2,
-      "render_hint": "prose",
-      "instructions": "Write the NFA Summary — a 3-5 sentence executive overview of the entire proposal. It must answer: (1) What is being approved? (platform/project name, purpose), (2) What problem does it solve? (current-state gap in one sentence), (3) What will it deliver? (key capabilities and outcomes), (4) How much and for how long? (total CAPEX amount and support/maintenance period). Use crisp, approval-note language. No bullet points — flowing sentences only. This is the first thing approvers read, so make every sentence count.",
-      "target_words": 150
-    },
-    {
-      "key": "nfa_background_current_challenges",
-      "title": "NFA Background — Current Challenges",
-      "order": 3,
-      "render_hint": "bullets",
-      "instructions": "Write the 'Current challenges' sub-section of NFA Background. Describe the current-state landscape and its specific pain points as a bullet list of 7-10 items. Each bullet should name a concrete problem: a fragmented system, a manual process, a data quality issue, a governance gap, or a scalability constraint. Be specific — name the actual systems, tools, or processes involved (e.g., SAP BW/BO, SQL Server, Power BI, Excel). Extract directly from source documents.",
-      "target_words": 280
-    },
-    {
-      "key": "nfa_background_proposed_approach",
-      "title": "NFA Background — Proposed Approach",
-      "order": 4,
-      "render_hint": "prose",
-      "instructions": "Write the 'Proposed Approach' sub-section of NFA Background. Describe the strategic plan and what will be built — 3-4 focused paragraphs covering: (1) the core platform migration and modernisation plan (what is being replaced and with what), (2) any additional data or analytics workloads being onboarded (e.g., Smart Meter data, AI/ML use cases), (3) operational or control tower capabilities enabled by the platform, (4) any agentic AI or advanced digital transformation capabilities that this platform enables in future. Write at a strategy level — not at implementation detail level.",
-      "target_words": 280
-    },
-    {
-      "key": "nfa_details",
-      "title": "NFA Details",
-      "order": 5,
-      "render_hint": "prose",
-      "instructions": "Write the opening narrative of the NFA Details section. Explain in 2-3 concise paragraphs: (1) the strategic need for the platform — why a unified data foundation is essential now, (2) what the platform will specifically provide at a high level (architecture, governance, analytics, AI/ML readiness), (3) the intended scope boundary of this NFA (what is and is not included). This sets context before the capability and benefit details that follow.",
-      "target_words": 180
-    },
-    {
-      "key": "platform_capabilities",
-      "title": "Platform / Solution Capabilities",
-      "order": 6,
-      "render_hint": "bullets",
-      "instructions": "List the key capabilities the platform will deliver as a bullet list of 8-12 items. Each bullet should name one distinct capability and describe it in one sentence. Cover capabilities such as: unified data ingestion framework, lakehouse/medallion architecture, business-aligned data models and KPIs, data governance and stewardship, security and role-based access control, observability and usage analytics dashboards, BI and reporting capabilities (e.g., React + Power BI), MLOps framework. Extract from source documents — use the exact capability names mentioned.",
-      "target_words": 220
-    },
-    {
-      "key": "scope_and_future_phases",
-      "title": "Scope Limitation and Future Phases",
-      "order": 7,
-      "render_hint": "mixed",
-      "instructions": "Write the Scope Limitation and Future Phases section with two labelled sub-sections:\n\n**Scope of this NFA:** One paragraph clearly stating what this NFA covers — the platform deliverables, number of KPI dashboards to be validated, and support/maintenance period. Start with: 'The scope of this NFA is limited to...' Be explicit about what is included.\n\n**Future Phases enabled by this platform:** A bullet list of 3-5 future initiatives that this platform will enable but are NOT part of this NFA. Examples: large-scale business use case development, Digital Control Tower, Agentic AI platform, large-scale AI model development. Each bullet should be one sentence.",
-      "target_words": 180
-    },
-    {
-      "key": "benefits",
-      "title": "Benefits",
-      "order": 8,
-      "render_hint": "bullets",
-      "instructions": "List the key benefits of the platform as a bullet list of 6-10 items. Quantify benefits wherever possible — use percentages, numbers, or comparative statements (e.g., '60% faster model deployment cycles', '100% Enterprise-wide KPI standardization'). Cover: operational efficiency gains (reduced manual effort, faster insights), data quality improvements, cost savings (decommissioning legacy platforms, reducing report duplication), AI/ML enablement, governance and auditability improvements, and scalability. Extract any metrics or quantified claims from the source documents.",
-      "target_words": 180
-    },
-    {
-      "key": "nfa_proposal",
-      "title": "NFA Proposal",
-      "order": 9,
-      "render_hint": "prose",
-      "instructions": "Write the NFA Proposal — the formal financial approval request. This should be 2-3 concise sentences covering: (1) the approval being sought (action verb: 'Approval is sought to incur CAPEX amounting to...'), (2) the total amount including GST (e.g., '₹12.1 Cr + GST'), (3) the purpose (design, development, implementation, and vendor support for X years), and (4) if the cost is split across entities, state each entity's portion clearly (e.g., 'Of ₹12.1 Cr, Rs. X Cr is for [Entity A] and Rs. Y Cr for [Entity B]'). Extract exact figures from source documents.",
-      "target_words": 100
-    },
-    {
-      "key": "approval_flow",
+      "key": "s2_approval_flow",
       "title": "Approval Flow",
-      "order": 10,
+      "order": 2,
       "render_hint": "table",
-      "instructions": "Generate the Approval Flow table showing the roles in the approval chain. Output as a markdown pipe table:\n\n| Role | Name |\n|------|------|\n| Initiator | [Name or blank] |\n| Approver | [Name or blank] |\n| Approver | [Name or blank] |\n| Approver | [Name or blank] |\n\nIf names are available in the source documents, include them. If not, list the roles only and leave Name column blank. Typical roles: Initiator, Department Head, Finance Approver, Business Head, MD/CEO.",
-      "target_words": 80
+      "instructions": "Produce a 2-column markdown table 'Role | Name'. Rows in order: Initiator; Reviewer; Approver 1; Approver 2; Approver 3; Approver 4; Approver 5. Leave the Name column blank where not provided - do NOT invent approver names.",
+      "target_words": 600
     }
   ]
 }

@@ -153,15 +153,18 @@ def _write_styled_docx(
     sections: list[dict],
 ) -> None:
     """
-    Route to the Adani-styled Word formatter. BRD uses its fixed numbered
-    structure; every other document type uses the generic structured formatter.
-    Both apply the same cover, header+logo, footer, styled headings, and
-    dark-blue table headers — so all document types look consistent.
+    Route to the Adani-styled Word formatter. Document structure now comes from
+    the expert-mapping-compiled templates (single source of truth), so BRD renders
+    through the GENERIC structured formatter like every other type — its numbered
+    sections and sub-headings come straight from the generated section content.
+    NIT keeps its Section-I/II/III/X layout (static boilerplate keyed by section).
+    All paths share the same cover, header+logo, footer, styled headings, and
+    dark-blue tables — so every document type looks consistent.
     """
-    if _is_brd(doc_type):
-        from generation.brd_formatter import format_brd_docx
+    if _is_nit(doc_type):
+        from generation.brd_formatter import format_nit_docx
         sections_by_key = {s["key"]: s["content"] for s in sections if s.get("key")}
-        format_brd_docx(sections_by_key, project_name, out_path)
+        format_nit_docx(sections_by_key, project_name, out_path)
     else:
         from generation.brd_formatter import format_structured_docx
         format_structured_docx(doc_type, project_name, sections, out_path)
@@ -211,18 +214,16 @@ def _write_pdf(
 ) -> Path:
     """
     Convert content to PDF.  Conversion chain (first available wins):
-      1. docx2pdf    — styled .docx via Microsoft Word COM (Windows + Office)
-      2. LibreOffice — styled .docx converted via soffice (cross-platform / Linux)
-      3. weasyprint  — HTML → PDF (pip install weasyprint)
-      4. xhtml2pdf   — HTML → PDF, pure Python (pip install xhtml2pdf)
+      1. docx2pdf  — styled .docx via Microsoft Word COM (Windows + Office). Highest
+                     fidelity (full Adani cover/logo/footer), used on a local Windows
+                     box with Office; unavailable on Databricks.
+      2. xhtml2pdf — pure-Python HTML → PDF, styled from generation/doc_style.py so it
+                     matches the preview + .docx brand (dark-blue tables, headings).
+                     This is the cross-platform / Databricks path. No LibreOffice.
 
-    Methods 1 & 2 build the SAME Adani-styled DOCX (cover, header/logo, footer,
-    styled headings, dark-blue table headers) and convert it, so the PDF matches
-    the DOCX exactly. Methods 3 & 4 are last-resort HTML fallbacks (styled tables
-    via CSS, but no cover/logo).
-
-    If none are available this raises _NoPdfConverter so the caller can fall back
-    to serving the DOCX instead.
+    If neither is available this raises _NoPdfConverter so the caller falls back
+    to serving the DOCX instead. (LibreOffice was removed from the backend
+    2026-07-17 — see doc_style.py.)
 
     Returns the actual output path (always `out_path` on success).
     """
@@ -239,96 +240,29 @@ def _write_pdf(
         logger.info("PDF written via docx2pdf → %s", out_path)
         return out_path
     except ImportError:
-        pass   # docx2pdf not installed
+        pass   # docx2pdf not installed (e.g. Databricks)
     except Exception as e:
-        logger.warning("docx2pdf failed: %s — trying next converter", e)
+        logger.warning("docx2pdf failed: %s — trying xhtml2pdf", e)
 
-    # ── Method 2: LibreOffice headless (styled DOCX → PDF, cross-platform) ────
-    # Preferred on Linux / Databricks where docx2pdf (Word COM) is unavailable.
-    # Produces a full-fidelity styled PDF identical to the DOCX.
-    try:
-        import subprocess, uuid as _uuid, shutil
-        from generation.preview_service import _find_soffice
-
-        soffice   = _find_soffice()   # raises RuntimeError if LibreOffice is absent
-        outdir    = out_path.parent
-        docx_tmp  = out_path.with_suffix(".docx")
-        _write_styled_docx(docx_tmp, doc_type, project_name, sections)
-
-        lo_profile = outdir / f"lo_profile_{_uuid.uuid4().hex}"
-        lo_profile.mkdir(parents=True, exist_ok=True)
-        cmd = [
-            soffice,
-            f"-env:UserInstallation=file:///{lo_profile.as_posix()}",
-            "--headless", "--norestore",
-            "--convert-to", "pdf",
-            "--outdir", str(outdir),
-            str(docx_tmp),
-        ]
-        result   = subprocess.run(cmd, timeout=120, capture_output=True, text=True)
-        produced = docx_tmp.with_suffix(".pdf")   # LibreOffice names it <stem>.pdf in outdir
-
-        if produced.exists():
-            if produced.resolve() != out_path.resolve():
-                shutil.move(str(produced), str(out_path))
-            for p in (docx_tmp, lo_profile):
-                try:
-                    shutil.rmtree(p) if p.is_dir() else p.unlink()
-                except OSError:
-                    pass
-            logger.info("PDF written via LibreOffice → %s", out_path)
-            return out_path
-        raise RuntimeError(
-            f"LibreOffice produced no PDF (rc={result.returncode}). "
-            f"stderr: {result.stderr[:300]}"
-        )
-    except RuntimeError as e:
-        logger.warning("LibreOffice PDF path unavailable: %s — trying next converter", e)
-    except Exception as e:
-        logger.warning("LibreOffice PDF conversion failed: %s — trying next converter", e)
-
-    # ── Build HTML body (shared by weasyprint / xhtml2pdf) ───────────────────
+    # ── Build styled HTML (brand palette from doc_style — matches preview/.docx) ──
     def _build_html() -> str:
+        from generation.doc_style import pdf_css
         body_lines = [
-            f"<h1 style='text-align:center'>{doc_type}</h1>",
-            f"<p style='text-align:center'><strong>Project:</strong> {project_name} &nbsp;|&nbsp; "
-            f"<strong>Generated:</strong> {datetime.utcnow().strftime('%Y-%m-%d')}</p>",
-            "<hr>",
+            '<div class="id-rule">',
+            f'<p class="id-title">{doc_type}</p>',
+            f'<p class="id-meta"><strong>Project:</strong> {project_name} &nbsp;|&nbsp; '
+            f'<strong>Generated:</strong> {datetime.utcnow().strftime("%Y-%m-%d")}</p>',
+            '</div>',
         ]
-        for sec in sections:
-            body_lines.append(f"<h2>{sec['title']}</h2>")
-            # Convert basic Markdown to HTML inline
-            content_html = _md_to_html(sec["content"])
-            body_lines.append(content_html)
-            body_lines.append("<hr>")
-
-        css = """
-            body { font-family: Arial, sans-serif; font-size: 11pt; margin: 40px; line-height: 1.5; }
-            h1   { color: #1f3864; border-bottom: 2px solid #1f3864; padding-bottom: 6px; }
-            h2   { color: #2e5490; margin-top: 24px; }
-            h3   { color: #4472c4; }
-            table { border-collapse: collapse; width: 100%; margin: 12px 0; }
-            th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; }
-            th   { background: #dce6f1; font-weight: bold; }
-            code { background: #f4f4f4; padding: 2px 4px; font-family: monospace; }
-            pre  { background: #f4f4f4; padding: 12px; overflow-x: auto; }
-            hr   { border: 1px solid #ddd; margin: 24px 0; }
-        """
+        for i, sec in enumerate(sections, start=1):
+            body_lines.append(f"<h2>{i}. {sec['title']}</h2>")
+            body_lines.append(_md_to_html(sec["content"]))
         return (
             f"<!DOCTYPE html><html><head><meta charset='UTF-8'>"
-            f"<style>{css}</style></head><body>{''.join(body_lines)}</body></html>"
+            f"<style>{pdf_css()}</style></head><body>{''.join(body_lines)}</body></html>"
         )
 
-    # ── Method 2: weasyprint ─────────────────────────────────────────────────
-    try:
-        import weasyprint
-        weasyprint.HTML(string=_build_html()).write_pdf(str(out_path))
-        logger.info("PDF written via weasyprint → %s", out_path)
-        return out_path
-    except ImportError:
-        pass
-
-    # ── Method 3: xhtml2pdf ──────────────────────────────────────────────────
+    # ── Method 2: xhtml2pdf (pure Python — the Databricks path) ──────────────
     try:
         from xhtml2pdf import pisa
         with open(out_path, "wb") as fh:
@@ -342,8 +276,8 @@ def _write_pdf(
 
     # ── No converter available ───────────────────────────────────────────────
     raise _NoPdfConverter(
-        "No PDF converter is installed. "
-        "Install one of: docx2pdf (needs MS Word), weasyprint, or xhtml2pdf."
+        "No PDF converter is installed. Install xhtml2pdf (cross-platform) "
+        "or docx2pdf (needs MS Word on Windows)."
     )
 
 
@@ -780,7 +714,7 @@ def upload_output_to_blob(job_id: str, file_path: Path, mime_type: str) -> Optio
         store = get_storage_service()
         if not isinstance(store, GCSStorageService):
             return None
-        blob_path = f"outputs/{job_id}/{file_path.name}"
+        blob_path = f"outputs/{_safe_job_id(job_id)}/{file_path.name}"
         blob_url = store._upload_blob(blob_path, file_path.read_bytes(), mime_type)
         logger.info("[preview] Uploaded output to GCS: %s", blob_url)
         return blob_url
@@ -802,7 +736,7 @@ def _get_existing_blob_url(job_id: str) -> Optional[str]:
         if not isinstance(store, GCSStorageService):
             return None
         # List blobs under outputs/{job_id}/
-        blobs = list(store._client.list_blobs(store._bucket_name, prefix=f"outputs/{job_id}/"))
+        blobs = list(store._client.list_blobs(store._bucket_name, prefix=f"outputs/{_safe_job_id(job_id)}/"))
         # Prefer DOCX, then PDF, then markdown
         for ext in (".docx", ".pdf", ".md"):
             for b in blobs:
@@ -817,15 +751,34 @@ def _get_existing_blob_url(job_id: str) -> Optional[str]:
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _safe_job_id(job_id: str) -> str:
+    """Validate a job_id before using it in a filesystem/blob path. Real job_ids
+    are UUIDs; reject anything containing path separators or traversal sequences
+    so a crafted id can never escape the outputs directory (CWE-22)."""
+    import re as _re
+    jid = (job_id or "").strip()
+    if not _re.fullmatch(r"[A-Za-z0-9_-]{1,64}", jid):
+        raise ValueError(f"Invalid job_id: {job_id!r}")
+    return jid
+
+
 def _output_dir(job_id: str) -> Path:
     # Absolute path — works regardless of the working directory at runtime.
-    return Path(__file__).parent.parent / "local_storage" / "outputs" / job_id
+    # job_id is validated (no separators / '..') to prevent path traversal.
+    return Path(__file__).parent.parent / "local_storage" / "outputs" / _safe_job_id(job_id)
 
 
 def _is_brd(doc_type: Optional[str]) -> bool:
     if not doc_type:
         return False
     return "brd" in doc_type.lower() or "business requirements" in doc_type.lower()
+
+
+def _is_nit(doc_type: Optional[str]) -> bool:
+    if not doc_type:
+        return False
+    dt = doc_type.lower()
+    return "nit" in dt or "notice inviting tender" in dt
 
 
 def _extract_project_name(user_inputs_json: Optional[str]) -> str:

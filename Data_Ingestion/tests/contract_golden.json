@@ -1,512 +1,478 @@
 ﻿{
-    "health":  {
-                   "status":  200,
-                   "shape":  [
-                                 "status",
-                                 "version"
-                             ]
-               },
-    "form_fields":  {
-                        "status":  200,
-                        "shape":  [
-                                      "fields"
-                                  ]
-                    },
-    "templates":  {
-                      "status":  200,
-                      "shape":  [
-                                    "templates"
-                                ]
-                  },
-    "ui_index":  {
-                     "status":  200,
-                     "shape":  "text/html"
-                 },
-    "ui_chat":  {
-                    "status":  200,
-                    "shape":  "text/html"
-                },
-    "doc_404":  {
-                    "status":  404,
-                    "shape":  [
-                                  "error"
-                              ]
-                },
-    "doc_status_404":  {
-                           "status":  404,
-                           "shape":  [
-                                         "error"
-                                     ]
-                       },
-    "upload_nofile":  {
-                          "status":  400,
-                          "shape":  [
-                                        "error"
-                                    ]
-                      },
-    "upload_badext":  {
-                          "status":  415,
-                          "shape":  [
-                                        "error",
-                                        "supported"
-                                    ]
-                      },
-    "projects_list":  {
-                          "status":  200,
-                          "shape":  [
-                                        "count",
-                                        "page",
-                                        "pages",
-                                        "per_page",
-                                        "projects",
-                                        "total"
-                                    ]
-                      },
-    "projects_filter":  {
-                            "status":  200,
-                            "shape":  [
-                                          "count",
-                                          "page",
-                                          "pages",
-                                          "per_page",
-                                          "projects",
-                                          "total"
-                                      ]
-                        },
-    "projects_stats":  {
-                           "status":  200,
-                           "shape":  [
-                                         "approved",
-                                         "total",
-                                         "under_draft",
-                                         "under_review"
-                                     ]
-                       },
-    "project_404":  {
-                        "status":  404,
-                        "shape":  [
-                                      "error"
-                                  ]
-                    },
-    "draft_create":  {
-                         "status":  201,
-                         "shape":  [
-                                       "message",
-                                       "project_id",
-                                       "status"
-                                   ]
-                     },
-    "draft_idempotent":  {
-                             "status":  200,
-                             "shape":  [
-                                           "message",
-                                           "project_id",
-                                           "status"
-                                       ]
-                         },
-    "draft_bad_uuid":  {
-                           "status":  400,
-                           "shape":  [
-                                         "error"
-                                     ]
-                       },
-    "project_get":  {
-                        "status":  200,
-                        "shape":  [
-                                      "additional_instructions",
-                                      "approval_matrix",
-                                      "as_is_processes",
-                                      "assumptions",
-                                      "business_justification",
-                                      "business_priority",
-                                      "business_unit",
-                                      "constraints",
-                                      "created_at",
-                                      "deadline",
-                                      "document_ids",
-                                      "document_type",
-                                      "end_date",
-                                      "estimated_cost_crores",
-                                      "future_roadmap",
-                                      "innovation_objectives",
-                                      "integration_requirement",
-                                      "job_id",
-                                      "opportunities",
-                                      "output_format",
-                                      "pain_points",
-                                      "problem_statement",
-                                      "project_code",
-                                      "project_id",
-                                      "project_name",
-                                      "project_objective",
-                                      "project_type",
-                                      "proposed_solution",
-                                      "risks",
-                                      "scalability_considerations",
-                                      "stakeholders",
-                                      "start_date",
-                                      "status",
-                                      "sustainability_esg",
-                                      "technical_landscape",
-                                      "template_id",
-                                      "updated_at"
-                                  ]
-                    },
-    "project_patch":  {
-                          "status":  200,
-                          "shape":  [
-                                        "project_id",
-                                        "updated_at"
-                                    ]
-                      },
-    "project_patch_empty":  {
-                                "status":  400,
-                                "shape":  [
-                                              "error"
-                                          ]
-                            },
-    "project_put_deprecated":  {
-                                   "status":  200,
-                                   "shape":  [
-                                                 "deprecated",
-                                                 "project_id",
-                                                 "updated_at"
-                                             ]
-                               },
-    "project_validate":  {
-                             "status":  200,
-                             "shape":  [
-                                           "message",
-                                           "missing_required",
-                                           "project_id",
-                                           "ready_to_generate",
-                                           "valid"
-                                       ]
-                         },
-    "project_data":  {
-                         "status":  200,
-                         "shape":  [
-                                       "additional_instructions",
-                                       "derived",
-                                       "derived_generated_at",
-                                       "document_type",
-                                       "ingested",
-                                       "output_format",
-                                       "project_id",
-                                       "status",
-                                       "template_id"
-                                   ]
-                     },
-    "data_ingested_put":  {
-                              "status":  200,
-                              "shape":  [
-                                            "project_id",
-                                            "updated_at"
-                                        ]
-                          },
-    "data_derived_put":  {
-                             "status":  200,
-                             "shape":  [
-                                           "project_id",
-                                           "updated_at"
-                                       ]
-                         },
-    "project_documents":  {
-                              "status":  200,
-                              "shape":  [
-                                            "documents",
-                                            "project_id"
-                                        ]
-                          },
-    "create_invalid":  {
-                           "status":  422,
-                           "shape":  [
-                                         "error",
-                                         "fields"
-                                     ]
-                       },
-    "gen_start_no_doc":  {
-                             "status":  400,
-                             "shape":  [
-                                           "error"
-                                       ]
-                         },
-    "gen_job_404":  {
-                        "status":  404,
-                        "shape":  [
-                                      "error"
-                                  ]
-                    },
-    "gen_section_404":  {
-                            "status":  404,
-                            "shape":  [
-                                          "error"
-                                      ]
-                        },
-    "gen_patch_empty":  {
-                            "status":  400,
-                            "shape":  [
-                                          "error"
-                                      ]
-                        },
-    "gen_preview_404":  {
-                            "status":  404,
-                            "shape":  [
-                                          "error"
-                                      ]
-                        },
-    "gen_export_404":  {
-                           "status":  404,
-                           "shape":  [
-                                         "error"
-                                     ]
-                       },
-    "gen_snapshots":  {
-                          "status":  200,
-                          "shape":  [
-                                        "snapshots"
-                                    ]
-                      },
-    "gen_prevstat_400":  {
-                             "status":  400,
-                             "shape":  [
-                                           "error"
-                                       ]
-                         },
-    "sections_patch_400":  {
-                               "status":  400,
-                               "shape":  [
-                                             "error"
-                                         ]
-                           },
-    "users_list":  {
-                       "status":  200,
-                       "shape":  [
-                                     "users"
-                                 ]
-                   },
-    "user_upsert":  {
-                        "status":  201,
-                        "shape":  [
-                                      "avatar",
-                                      "created_at",
-                                      "email",
-                                      "is_active",
-                                      "name",
-                                      "role",
-                                      "user_id"
-                                  ]
-                    },
-    "user_no_email":  {
-                          "status":  400,
-                          "shape":  [
-                                        "error"
-                                    ]
-                      },
-    "personas_list":  {
-                          "status":  200,
-                          "shape":  [
-                                        "personas"
-                                    ]
-                      },
-    "persona_create":  {
-                           "status":  201,
-                           "shape":  [
-                                         "description",
-                                         "is_system",
-                                         "name",
-                                         "owner_email",
-                                         "persona_id"
-                                     ]
-                       },
-    "persona_update":  {
-                           "status":  200,
-                           "shape":  [
-                                         "description",
-                                         "is_system",
-                                         "name",
-                                         "owner_email",
-                                         "persona_id"
-                                     ]
-                       },
-    "persona_delete":  {
-                           "status":  200,
-                           "shape":  [
-                                         "persona_id",
-                                         "status"
-                                     ]
-                       },
-    "persona_del_404":  {
-                            "status":  404,
-                            "shape":  [
-                                          "error"
-                                      ]
-                        },
-    "notif_list":  {
-                       "status":  200,
-                       "shape":  [
-                                     "notifications",
-                                     "unread_count"
-                                 ]
-                   },
-    "notif_no_header":  {
-                            "status":  400,
-                            "shape":  [
-                                          "error"
-                                      ]
-                        },
-    "notif_read":  {
-                       "status":  200,
-                       "shape":  [
-                                     "marked_read"
-                                 ]
-                   },
-    "review_sent":  {
-                        "status":  200,
-                        "shape":  [
-                                      "reviews"
-                                  ]
-                    },
-    "review_received":  {
-                            "status":  200,
-                            "shape":  [
-                                          "reviews"
-                                      ]
-                        },
-    "review_no_header":  {
-                             "status":  400,
-                             "shape":  [
-                                           "error"
-                                       ]
-                         },
-    "review_404":  {
-                       "status":  404,
-                       "shape":  [
-                                     "error"
-                                 ]
-                   },
-    "review_share_404":  {
-                             "status":  404,
-                             "shape":  [
-                                           "error"
-                                       ]
-                         },
-    "review_share":  {
-                         "status":  201,
-                         "shape":  [
-                                       "comments_count",
-                                       "created_at",
-                                       "document_type",
-                                       "job_id",
-                                       "message",
-                                       "project_id",
-                                       "requested_by",
-                                       "review_id",
-                                       "reviewers",
-                                       "status"
-                                   ]
-                     },
-    "review_workspace":  {
-                             "status":  200,
-                             "shape":  [
-                                           "ai_summaries",
-                                           "comments",
-                                           "comments_count",
-                                           "created_at",
-                                           "document_type",
-                                           "job_id",
-                                           "message",
-                                           "project_id",
-                                           "project_name",
-                                           "requested_by",
-                                           "review_id",
-                                           "review_status",
-                                           "reviewers",
-                                           "sections",
-                                           "status"
-                                       ]
-                         },
-    "review_comment":  {
-                           "status":  201,
-                           "shape":  [
-                                         "applied_section_comment_id",
-                                         "author",
-                                         "comment_id",
-                                         "created_at",
-                                         "parent_id",
-                                         "persona",
-                                         "review_id",
-                                         "section_id",
-                                         "section_title",
-                                         "source",
-                                         "status",
-                                         "text",
-                                         "updated_at"
-                                     ]
-                       },
-    "comment_resolve":  {
-                            "status":  200,
-                            "shape":  [
-                                          "applied_section_comment_id",
-                                          "author",
-                                          "comment_id",
-                                          "created_at",
-                                          "parent_id",
-                                          "persona",
-                                          "review_id",
-                                          "section_id",
-                                          "section_title",
-                                          "source",
-                                          "status",
-                                          "text",
-                                          "updated_at"
-                                      ]
-                        },
-    "comment_delete":  {
-                           "status":  200,
-                           "shape":  [
-                                         "comment_id",
-                                         "status"
-                                     ]
-                       },
-    "review_respond":  {
-                           "status":  200,
-                           "shape":  [
-                                         "action",
-                                         "review_id",
-                                         "review_status",
-                                         "reviewer",
-                                         "reviewers"
-                                     ]
-                       },
-    "review_respond_bad":  {
-                               "status":  400,
-                               "shape":  [
-                                             "error"
-                                         ]
-                           },
-    "review_renotify":  {
-                            "status":  200,
-                            "shape":  [
-                                          "at",
-                                          "renotified",
-                                          "review_id"
-                                      ]
-                        },
-    "review_summaries":  {
-                             "status":  200,
-                             "shape":  [
-                                           "summaries"
-                                       ]
-                         },
-    "project_delete":  {
-                           "status":  204,
-                           "shape":  "text/html"
-                       },
-    "project_delete_404":  {
-                               "status":  404,
-                               "shape":  [
-                                             "error"
-                                         ]
-                           }
+  "health": {
+    "status": 200,
+    "shape": [
+      "status",
+      "version"
+    ]
+  },
+  "form_fields": {
+    "status": 200,
+    "shape": [
+      "fields"
+    ]
+  },
+  "templates": {
+    "status": 200,
+    "shape": [
+      "templates"
+    ]
+  },
+  "doc_404": {
+    "status": 404,
+    "shape": [
+      "error"
+    ]
+  },
+  "doc_status_404": {
+    "status": 404,
+    "shape": [
+      "error"
+    ]
+  },
+  "upload_nofile": {
+    "status": 400,
+    "shape": [
+      "error"
+    ]
+  },
+  "upload_badext": {
+    "status": 415,
+    "shape": [
+      "error",
+      "supported"
+    ]
+  },
+  "projects_list": {
+    "status": 200,
+    "shape": [
+      "count",
+      "page",
+      "pages",
+      "per_page",
+      "projects",
+      "total"
+    ]
+  },
+  "projects_filter": {
+    "status": 200,
+    "shape": [
+      "count",
+      "page",
+      "pages",
+      "per_page",
+      "projects",
+      "total"
+    ]
+  },
+  "projects_stats": {
+    "status": 200,
+    "shape": [
+      "approved",
+      "total",
+      "under_draft",
+      "under_review"
+    ]
+  },
+  "project_404": {
+    "status": 404,
+    "shape": [
+      "error"
+    ]
+  },
+  "draft_create": {
+    "status": 201,
+    "shape": [
+      "message",
+      "project_id",
+      "status"
+    ]
+  },
+  "draft_idempotent": {
+    "status": 200,
+    "shape": [
+      "message",
+      "project_id",
+      "status"
+    ]
+  },
+  "draft_bad_uuid": {
+    "status": 400,
+    "shape": [
+      "error"
+    ]
+  },
+  "project_get": {
+    "status": 200,
+    "shape": [
+      "additional_instructions",
+      "approval_matrix",
+      "as_is_processes",
+      "assumptions",
+      "business_justification",
+      "business_priority",
+      "business_unit",
+      "constraints",
+      "created_at",
+      "deadline",
+      "document_ids",
+      "document_type",
+      "end_date",
+      "estimated_cost_crores",
+      "future_roadmap",
+      "innovation_objectives",
+      "integration_requirement",
+      "job_id",
+      "opportunities",
+      "output_format",
+      "pain_points",
+      "problem_statement",
+      "project_code",
+      "project_id",
+      "project_name",
+      "project_objective",
+      "project_type",
+      "proposed_solution",
+      "risks",
+      "scalability_considerations",
+      "stakeholders",
+      "start_date",
+      "status",
+      "sustainability_esg",
+      "technical_landscape",
+      "template_id",
+      "updated_at"
+    ]
+  },
+  "project_patch": {
+    "status": 200,
+    "shape": [
+      "project_id",
+      "updated_at"
+    ]
+  },
+  "project_patch_empty": {
+    "status": 400,
+    "shape": [
+      "error"
+    ]
+  },
+  "project_validate": {
+    "status": 200,
+    "shape": [
+      "message",
+      "missing_required",
+      "project_id",
+      "ready_to_generate",
+      "valid"
+    ]
+  },
+  "project_data": {
+    "status": 200,
+    "shape": [
+      "additional_instructions",
+      "derived",
+      "derived_generated_at",
+      "document_type",
+      "ingested",
+      "output_format",
+      "project_id",
+      "status",
+      "template_id"
+    ]
+  },
+  "data_ingested_put": {
+    "status": 200,
+    "shape": [
+      "project_id",
+      "updated_at"
+    ]
+  },
+  "data_derived_put": {
+    "status": 200,
+    "shape": [
+      "project_id",
+      "updated_at"
+    ]
+  },
+  "project_documents": {
+    "status": 200,
+    "shape": [
+      "documents",
+      "project_id"
+    ]
+  },
+  "create_invalid": {
+    "status": 422,
+    "shape": [
+      "error",
+      "fields"
+    ]
+  },
+  "gen_job_404": {
+    "status": 404,
+    "shape": [
+      "error"
+    ]
+  },
+  "gen_section_404": {
+    "status": 404,
+    "shape": [
+      "error"
+    ]
+  },
+  "gen_patch_empty": {
+    "status": 400,
+    "shape": [
+      "error"
+    ]
+  },
+  "gen_preview_404": {
+    "status": 404,
+    "shape": [
+      "error"
+    ]
+  },
+  "gen_export_404": {
+    "status": 404,
+    "shape": [
+      "error"
+    ]
+  },
+  "gen_snapshots": {
+    "status": 200,
+    "shape": [
+      "snapshots"
+    ]
+  },
+  "users_list": {
+    "status": 200,
+    "shape": [
+      "users"
+    ]
+  },
+  "user_upsert": {
+    "status": 201,
+    "shape": [
+      "avatar",
+      "created_at",
+      "email",
+      "is_active",
+      "name",
+      "role",
+      "user_id"
+    ]
+  },
+  "user_no_email": {
+    "status": 400,
+    "shape": [
+      "error"
+    ]
+  },
+  "personas_list": {
+    "status": 200,
+    "shape": [
+      "personas"
+    ]
+  },
+  "persona_create": {
+    "status": 201,
+    "shape": [
+      "description",
+      "is_system",
+      "name",
+      "owner_email",
+      "persona_id"
+    ]
+  },
+  "persona_update": {
+    "status": 200,
+    "shape": [
+      "description",
+      "is_system",
+      "name",
+      "owner_email",
+      "persona_id"
+    ]
+  },
+  "persona_delete": {
+    "status": 200,
+    "shape": [
+      "persona_id",
+      "status"
+    ]
+  },
+  "persona_del_404": {
+    "status": 404,
+    "shape": [
+      "error"
+    ]
+  },
+  "notif_list": {
+    "status": 200,
+    "shape": [
+      "notifications",
+      "unread_count"
+    ]
+  },
+  "notif_no_header": {
+    "status": 400,
+    "shape": [
+      "error"
+    ]
+  },
+  "notif_read": {
+    "status": 200,
+    "shape": [
+      "marked_read"
+    ]
+  },
+  "review_sent": {
+    "status": 200,
+    "shape": [
+      "reviews"
+    ]
+  },
+  "review_received": {
+    "status": 200,
+    "shape": [
+      "reviews"
+    ]
+  },
+  "review_no_header": {
+    "status": 400,
+    "shape": [
+      "error"
+    ]
+  },
+  "review_404": {
+    "status": 404,
+    "shape": [
+      "error"
+    ]
+  },
+  "review_share_404": {
+    "status": 404,
+    "shape": [
+      "error"
+    ]
+  },
+  "review_share": {
+    "status": 201,
+    "shape": [
+      "comments_count",
+      "created_at",
+      "document_type",
+      "job_id",
+      "message",
+      "project_id",
+      "requested_by",
+      "review_id",
+      "reviewers",
+      "status"
+    ]
+  },
+  "review_workspace": {
+    "status": 200,
+    "shape": [
+      "ai_summaries",
+      "comments",
+      "comments_count",
+      "created_at",
+      "document_type",
+      "job_id",
+      "message",
+      "project_id",
+      "project_name",
+      "requested_by",
+      "review_id",
+      "review_status",
+      "reviewers",
+      "sections",
+      "status"
+    ]
+  },
+  "review_comment": {
+    "status": 201,
+    "shape": [
+      "applied_section_comment_id",
+      "author",
+      "comment_id",
+      "created_at",
+      "parent_id",
+      "persona",
+      "review_id",
+      "section_id",
+      "section_title",
+      "source",
+      "status",
+      "text",
+      "updated_at"
+    ]
+  },
+  "comment_resolve": {
+    "status": 200,
+    "shape": [
+      "applied_section_comment_id",
+      "author",
+      "comment_id",
+      "created_at",
+      "parent_id",
+      "persona",
+      "review_id",
+      "section_id",
+      "section_title",
+      "source",
+      "status",
+      "text",
+      "updated_at"
+    ]
+  },
+  "comment_delete": {
+    "status": 200,
+    "shape": [
+      "comment_id",
+      "status"
+    ]
+  },
+  "review_respond": {
+    "status": 200,
+    "shape": [
+      "action",
+      "review_id",
+      "review_status",
+      "reviewer",
+      "reviewers"
+    ]
+  },
+  "review_respond_bad": {
+    "status": 400,
+    "shape": [
+      "error"
+    ]
+  },
+  "review_renotify": {
+    "status": 200,
+    "shape": [
+      "at",
+      "renotified",
+      "review_id"
+    ]
+  },
+  "review_summaries": {
+    "status": 200,
+    "shape": [
+      "summaries"
+    ]
+  },
+  "project_delete": {
+    "status": 204,
+    "shape": "text/html"
+  },
+  "project_delete_404": {
+    "status": 404,
+    "shape": [
+      "error"
+    ]
+  }
 }

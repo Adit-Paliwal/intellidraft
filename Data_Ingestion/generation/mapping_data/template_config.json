@@ -1,0 +1,56 @@
+{
+  "BRD": {
+    "title_prefix": "BRD for",
+    "full_name": "Business Requirements Document",
+    "template_id": "AESL-PR-002-03",
+    "document_status": "Draft",
+    "classification": "Internal",
+    "confidentiality_text": "This document contains restricted information. The access level for the document is specified above. The addressee should honour these access rights by preventing intentional or accidental access outside the access scope.",
+    "disclaimer_text": "This document has been prepared by Adani Energy Solutions Limited (AESL) solely for internal use. It contains information that is confidential, proprietary, and intended exclusively for authorized personnel involved in the project. No part of this document may be reproduced, distributed, or disclosed to any third party without the prior written consent of AESL."
+  },
+  "NDPR": {
+    "title_prefix": "NDPR for",
+    "full_name": "Non-Detailed Project Report (NDPR)",
+    "template_id": "AESL-PR-003-01",
+    "document_status": "Draft",
+    "classification": "Internal",
+    "confidentiality_text": "This document contains restricted information. The access level for the document is specified above. The addressee should honour these access rights by preventing intentional or accidental access outside the access scope.",
+    "disclaimer_text": "This document has been prepared by Adani Energy Solutions Limited (AESL) solely for internal use. It contains information that is confidential, proprietary, and intended exclusively for authorized personnel involved in the project. No part of this document may be reproduced, distributed, or disclosed to any third party without the prior written consent of AESL."
+  },
+  "NFA": {
+    "title_prefix": "Note for Approval -",
+    "full_name": "Note for Approval",
+    "template_id": "AESL-PR-004-01",
+    "document_status": "Draft",
+    "classification": "Internal",
+    "confidentiality_text": "This document contains restricted information. The access level for the document is specified above. The addressee should honour these access rights by preventing intentional or accidental access outside the access scope.",
+    "disclaimer_text": "This document has been prepared by Adani Energy Solutions Limited (AESL) solely for internal use. It contains information that is confidential, proprietary, and intended exclusively for authorized personnel involved in the project. No part of this document may be reproduced, distributed, or disclosed to any third party without the prior written consent of AESL."
+  },
+  "NIT": {
+    "title_prefix": "Notice Inviting Tender -",
+    "full_name": "Notice Inviting Tender",
+    "template_id": "AESL-PR-005-01",
+    "document_status": "Draft",
+    "classification": "Internal",
+    "confidentiality_text": "This document contains restricted information. The access level for the document is specified above. The addressee should honour these access rights by preventing intentional or accidental access outside the access scope.",
+    "disclaimer_text": "This document has been prepared by Adani Energy Solutions Limited (AESL) solely for internal use. It contains information that is confidential, proprietary, and intended exclusively for authorized personnel involved in the project. No part of this document may be reproduced, distributed, or disclosed to any third party without the prior written consent of AESL."
+  },
+  "RFP": {
+    "title_prefix": "Request for Proposal -",
+    "full_name": "Request for Proposal",
+    "template_id": "AESL-PR-006-01",
+    "document_status": "Draft",
+    "classification": "Internal",
+    "confidentiality_text": "This document contains restricted information. The access level for the document is specified above. The addressee should honour these access rights by preventing intentional or accidental access outside the access scope.",
+    "disclaimer_text": "This document has been prepared by Adani Energy Solutions Limited (AESL) solely for internal use. It contains information that is confidential, proprietary, and intended exclusively for authorized personnel involved in the project. No part of this document may be reproduced, distributed, or disclosed to any third party without the prior written consent of AESL."
+  },
+  "": {
+    "title_prefix": "",
+    "full_name": "",
+    "template_id": "",
+    "document_status": "",
+    "classification": "",
+    "confidentiality_text": "",
+    "disclaimer_text": ""
+  }
+}

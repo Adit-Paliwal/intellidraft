@@ -200,42 +200,20 @@ def _qint(request: Request, name: str, default: int) -> int:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# FRONTEND — served from the same app (same origin as /api)
+# API-ONLY server — no frontend is served.
 #
-# Primary UI: React SPA (frontend-react/dist, built with `npm run build`).
-# The legacy self-contained pages stay reachable at /index.html and /chat.html
-# as a fallback until the SPA fully replaces them.
+# The React SPA and legacy HTML pages were removed (2026-07-16): the app is
+# tested and used purely through the REST API (Postman) + Swagger at /docs.
+# Root "/" points at the interactive API docs so a browser hit isn't a dead end.
 # ═════════════════════════════════════════════════════════════════════════════
 
-_FRONTEND = _BASE / "frontend"
-# SPA build output. Two locations checked:
-#   1. Data_Ingestion/frontend-react-dist  — deploy copy (Databricks Apps uploads
-#      only Data_Ingestion/, so CI must copy frontend-react/dist here pre-deploy)
-#   2. ../frontend-react/dist              — local dev (vite build output in place)
-_SPA_DIST = _BASE / "frontend-react-dist"
-if not _SPA_DIST.exists():
-    _SPA_DIST = _BASE.parent / "frontend-react" / "dist"
-
-@app.get("/index.html")
-def _ui_index_html():
-    return FileResponse(str(_FRONTEND / "index.html"), media_type="text/html")
-
-@app.get("/chat.html")
-def _ui_chat_html():
-    return FileResponse(str(_FRONTEND / "chat.html"), media_type="text/html")
-
-
-if _SPA_DIST.exists():
-    from fastapi.staticfiles import StaticFiles
-    app.mount("/assets", StaticFiles(directory=str(_SPA_DIST / "assets")), name="spa_assets")
-
-    @app.get("/")
-    def _spa_root():
-        return FileResponse(str(_SPA_DIST / "index.html"), media_type="text/html")
-else:
-    @app.get("/")
-    def _ui_index():
-        return FileResponse(str(_FRONTEND / "index.html"), media_type="text/html")
+@app.get("/")
+def _root():
+    # Send browsers to the interactive API reference; API clients use /api/*.
+    return JSONResponse(
+        {"service": "Intellidraft API", "status": "ok",
+         "docs": "/docs", "health": "/api/health"},
+    )
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -356,28 +334,6 @@ def upload_document(file: UploadFile = File(default=None)):
         return J({"error": f"Parsing failed: {e}"}, 500)
 
 
-# 3. POST /api/submit-inputs
-@app.post("/api/submit-inputs")
-def submit_user_inputs(body: Optional[dict] = Body(default=None)):
-    try:
-        from api.user_input_schema import UserInputRequest
-        from models.meta_schema    import UserInputData, ParsedDocument
-
-        req_data = UserInputRequest(**(body or {}))
-        meta     = _get_store().get_meta_json(req_data.document_id)
-        doc      = ParsedDocument(**meta)
-        doc.user_inputs = UserInputData(**req_data.model_dump(exclude={"document_id"}))
-        _get_store().save_meta_json(doc)
-        _get_store().save_to_cosmos(doc)
-        return J({"document_id": req_data.document_id,
-                  "message": "Inputs saved. Ready for generation."})
-    except FileNotFoundError as e:
-        return J({"error": str(e)}, 404)
-    except Exception as e:
-        logger.exception("submit-inputs failed")
-        return J({"error": str(e)}, 500)
-
-
 # 4./5. GET /api/document/{doc_id} + /status
 @app.get("/api/document/{doc_id}")
 def get_document(doc_id: str):
@@ -402,40 +358,6 @@ def get_document_status(doc_id: str):
 # ═════════════════════════════════════════════════════════════════════════════
 # GENERATION ENDPOINTS
 # ═════════════════════════════════════════════════════════════════════════════
-
-# 6. POST /api/generate/start  — DEPRECATED (use POST /api/generate/project/{id})
-@app.post("/api/generate/start")
-def generate_start(body: Optional[dict] = Body(default=None)):
-    try:
-        from generation.generation_service import start_job
-        body        = body or {}
-        document_id = body.get("document_id")
-        user_inputs = body.get("user_inputs") or {}
-        template_id = body.get("template_id")
-        if not document_id:
-            return J({"error": "document_id is required"}, 400)
-        if not user_inputs.get("document_type"):
-            return J({"error": "user_inputs.document_type is required"}, 400)
-        job = start_job(document_id, user_inputs, template_id)
-        resp = J({
-            "job_id":   job["job_id"],
-            "status":   job["status"],
-            "sections": [{"section_id": s["section_id"],
-                          "section_title": s["section_title"],
-                          "status": s["status"]}
-                         for s in job.get("sections", [])],
-            "message": f"{job['total_sections']} sections queued.",
-            "deprecated": "Use POST /api/generate/project/{project_id} instead.",
-        }, 201)
-        # NOTE: header values must be latin-1/ASCII under uvicorn — no em dashes
-        resp.headers["X-Deprecated"] = "Use POST /api/generate/project/{project_id} - this endpoint will be removed in a future release"
-        return resp
-    except ValueError as e:
-        return J({"error": str(e)}, 400)
-    except Exception as e:
-        logger.exception("generate/start failed")
-        return J({"error": str(e)}, 500)
-
 
 # 19. POST /api/generate/project/{project_id}  (registered before /{job_id} routes)
 @app.post("/api/generate/project/{project_id}")
@@ -554,14 +476,29 @@ def generate_add_comment(job_id: str, section_id: str,
 def generate_regenerate(job_id: str, section_id: str,
                         body: Optional[dict] = Body(default=None)):
     try:
-        from generation.generation_service import regenerate_section
-        comment_id  = (body or {}).get("comment_id")
+        from generation.generation_service import add_comment, regenerate_section
+        body       = body or {}
+        comment_id = body.get("comment_id")
+        # Single-call section update: accept the edit instruction INLINE.
+        # If the caller passes `instruction` (or `comment_text`) and no
+        # comment_id, we create the edit_request comment here and feed it into
+        # the regeneration — so the section is revised IN LIGHT OF the user's
+        # input (revision mode: keeps the existing content, applies the change).
+        # Precedence: explicit comment_id > inline instruction > neither.
+        # With NEITHER, the section is regenerated from scratch (no edit) —
+        # that is the from-blank behaviour and is usually NOT what "update this
+        # section" wants, so the frontend should always send `instruction`.
+        if not comment_id:
+            instruction = (body.get("instruction") or body.get("comment_text") or "").strip()
+            if instruction:
+                comment_id = add_comment(section_id, instruction, "edit_request")["comment_id"]
         new_version = regenerate_section(section_id, comment_id)
         return J({"new_version": new_version,
                   "message": f"Regenerated — version {new_version['version_number']}."})
     except ValueError as e:
         return J({"error": str(e)}, 404)
     except Exception as e:
+        logger.exception("generate_regenerate failed")
         return J({"error": str(e)}, 500)
 
 
@@ -613,21 +550,32 @@ def generate_preview_html(job_id: str):
         return J({"error": str(e)}, 500)
 
 
-# 12d. GET /api/generate/{job_id}/preview/status — legacy poll shim (sync preview)
-@app.get("/api/generate/{job_id}/preview/status")
-def generate_preview_status(job_id: str, request: Request):
-    task_id = (request.query_params.get("task_id") or "").strip()
-    if not task_id:
-        return J({"error": "task_id query param required"}, 400)
+# 12c-save. POST /api/generate/{job_id}/preview/save — manual whole-document HTML edit
+# The frontend sends ONLY the edited HTML of the preview. The backend stores it
+# verbatim as a new version (DocumentSnapshot, trigger_type=manual_html) attributed
+# to X-User-Name, reports which sections changed, and makes it the live preview.
+@app.post("/api/generate/{job_id}/preview/save")
+def generate_preview_save(job_id: str, request: Request,
+                          body: Optional[dict] = Body(default=None)):
     try:
-        from generation.preview_service import poll_preview_status
-        result = poll_preview_status(job_id, task_id)
-        status_code = 200 if result.get("status") == "ready" else (
-            202 if result.get("status") == "pending" else 500
-        )
-        return J(result, status_code)
+        body = body or {}
+        html = body.get("html")
+        if not html or not str(html).strip():
+            return J({"error": "html is required"}, 400)
+        from generation.generation_service import save_edited_html
+        name  = (request.headers.get("X-User-Name")  or "").strip() or None
+        email = (request.headers.get("X-User-Email") or "").strip() or None
+        result = save_edited_html(job_id, html, author_name=name,
+                                  author_email=email, label=body.get("label"))
+        return J({
+            "snapshot":         result,
+            "changed_sections": result.get("changed_sections", []),
+            "message": f"Saved as version by {name or email or 'user'}.",
+        }, 201)
+    except ValueError as e:
+        return J({"error": str(e)}, 404)
     except Exception as e:
-        logger.exception("generate_preview_status failed")
+        logger.exception("generate_preview_save failed")
         return J({"error": str(e)}, 500)
 
 
@@ -687,28 +635,6 @@ async def generate_stream_events(job_id: str):
     )
 
 
-# 12f-patch. PATCH /api/sections/{section_id} — shortcut for inline preview editor
-@app.patch("/api/sections/{section_id}")
-def update_section_direct(section_id: str, request: Request,
-                          body: Optional[dict] = Body(default=None)):
-    try:
-        content = ((body or {}).get("content") or "").strip()
-        if not content:
-            return J({"error": "content is required"}, 400)
-        from generation.generation_service import update_section_content
-        editor = (request.headers.get("X-User-Email") or "").strip()
-        new_version = update_section_content(section_id, content, edited_by=editor)
-        return J({
-            "version": new_version,
-            "message": f"Section updated — version {new_version['version_number']}.",
-        })
-    except ValueError as e:
-        return J({"error": str(e)}, 404)
-    except Exception as e:
-        logger.exception("update_section_direct failed")
-        return J({"error": str(e)}, 500)
-
-
 # 12e. POST /api/generate/{job_id}/snapshot — create a version checkpoint
 @app.post("/api/generate/{job_id}/snapshot")
 def generate_create_snapshot(job_id: str, body: Optional[dict] = Body(default=None)):
@@ -734,6 +660,20 @@ def generate_list_snapshots(job_id: str):
         return J({"snapshots": list_snapshots(job_id)})
     except Exception as e:
         logger.exception("list_snapshots failed")
+        return J({"error": str(e)}, 500)
+
+
+# 12f-get. GET /api/generate/{job_id}/snapshot/{snapshot_id} — one version WITH its
+# html_content, so the frontend can load an old edited-HTML version to view/restore.
+@app.get("/api/generate/{job_id}/snapshot/{snapshot_id}")
+def generate_get_snapshot(job_id: str, snapshot_id: str):
+    try:
+        from generation.generation_service import get_snapshot
+        return J(get_snapshot(job_id, snapshot_id))
+    except ValueError as e:
+        return J({"error": str(e)}, 404)
+    except Exception as e:
+        logger.exception("get_snapshot failed")
         return J({"error": str(e)}, 500)
 
 
@@ -1356,32 +1296,6 @@ def get_project(project_id: str):
         return J({"error": str(e)}, 500)
 
 
-# 18b. PUT /api/projects/{project_id} — DEPRECATED full update (use PATCH)
-@app.put("/api/projects/{project_id}")
-def update_project(project_id: str, body: Optional[dict] = Body(default=None)):
-    try:
-        from generation.db import get_session
-        body = body or {}
-        now  = datetime.utcnow()
-        with get_session() as s:
-            proj = _get_proj_or_404(s, project_id)
-            if body.get("project_code"):
-                conflict = _project_code_conflict(s, body["project_code"], exclude_id=project_id)
-                if conflict:
-                    return conflict
-            _apply_fields(proj, body)
-            proj.updated_at = now
-            s.commit()
-        resp = J({"project_id": project_id, "updated_at": now.isoformat(),
-                  "deprecated": "Use PATCH /api/projects/{id} instead of PUT."})
-        resp.headers["X-Deprecated"] = "Use PATCH /api/projects/{id} - PUT will be removed in a future release"
-        return resp
-    except FileNotFoundError:
-        return J({"error": f"Project '{project_id}' not found."}, 404)
-    except Exception as e:
-        return J({"error": str(e)}, 500)
-
-
 # 18c. PATCH /api/projects/{project_id} — partial update / autosave
 @app.patch("/api/projects/{project_id}")
 def patch_project(project_id: str, body: Optional[dict] = Body(default=None)):
@@ -1823,18 +1737,8 @@ def notifications_mark_read(request: Request, body: Optional[dict] = Body(defaul
         return _review_error(e)
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-# SPA fallback — client-side routes (/login, /create, /project/x, /review/x)
-# resolve to index.html on hard refresh. Registered LAST so every API route
-# above wins; unknown /api/* paths still return JSON 404.
-# ═════════════════════════════════════════════════════════════════════════════
-
-if _SPA_DIST.exists():
-    @app.get("/{spa_path:path}")
-    def _spa_fallback(spa_path: str):
-        if spa_path.startswith(("api/", "assets/", "docs", "openapi.json")):
-            return J({"error": "Not found"}, 404)
-        return FileResponse(str(_SPA_DIST / "index.html"), media_type="text/html")
+# No SPA fallback — this is an API-only server. Unknown non-/api paths return
+# FastAPI's default 404 JSON.
 
 
 # ═════════════════════════════════════════════════════════════════════════════

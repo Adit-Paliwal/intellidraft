@@ -131,7 +131,7 @@ async def _strip_file_content_callback(callback_context, llm_request):
                 mime = getattr(part.inline_data, "mime_type", None) or "application/octet-stream"
                 data = getattr(part.inline_data, "data", b"") or b""
 
-                file_key = hashlib.md5(data[:4096], usedforsecurity=False).hexdigest()[:12]
+                file_key = hashlib.sha256(data[:4096], usedforsecurity=False).hexdigest()[:12]
 
                 if file_key in artifact_map:
                     filename = artifact_map[file_key]

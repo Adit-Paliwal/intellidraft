@@ -1,200 +1,94 @@
 """
-Section Mapping — per-section generation guidance from the Adani mapping document.
+Section guidance — the per-section spec block injected into the generation prompt.
+================================================================================
+SINGLE SOURCE OF TRUTH: each section's spec now lives directly inside its template
+file (templates/<doc>.json). There is NO Excel and NO compile step. To tune the
+system, edit the section in templates/<doc>.json and restart the server.
 
-The mapping document (MAPPING_DOCUMENT_FOR_AGENT.xlsx) was prepared by the client
-team from real Adani document templates. It defines, for each document type and
-section:
-  - What the section should contain (description)
-  - Required columns/fields (variables) — critical for table sections
-  - Output format (Table / Text / List / mixed)
-  - ID format conventions (FR-001, BRQ-001, UC1 etc.)
-  - Depth level (Detailed / Short) from section_config
-  - Which BU input fields from the project form supply data for this section
+This module turns a section's spec fields into the
+'## ADANI TEMPLATE SPECIFICATION' block that is appended to the section's user
+prompt (see generation/generator.py -> generate_section).
 
-This module compiles that information into LLM prompt guidance injected by
-generator.py immediately before each section is generated.
+A template section may carry any of these OPTIONAL fields (all tunable by hand):
+  scope_boundary  what NOT to include (rendered as "MUST NOT INCLUDE")
+  variables       exact table column names (enforced as the table header row)
+  format          Text | List | Table | Form | Header
+  depth           Detailed | Short
+  remarks         extra generation notes
+  source_fields   project/derived form fields that feed this section
+  annexure        {"reference_text": "..."}  (e.g. NDPR regulatory references)
 
-Data source: generation/mapping_data/section_specs.json
-  (compiled from the XLSX by running the compile_mapping.py script — do not
-   edit the JSON manually; re-run the script instead.)
+A section that carries none of these (its `instructions` already say everything)
+simply produces no extra block — build_section_guidance returns "".
 """
 
 from __future__ import annotations
 
-import json
 import re
-from functools import lru_cache
-from pathlib import Path
 from typing import Optional
 
-_SPECS_PATH = Path(__file__).parent / "mapping_data" / "section_specs.json"
 
-# Doc-type aliases so callers can pass "Business Requirements Document (BRD)" etc.
-_DOC_ALIASES: dict[str, str] = {
-    "brd": "BRD",
-    "business requirements document": "BRD",
-    "business requirements": "BRD",
-    "rfp": "RFP",
-    "request for proposal": "RFP",
-    "ndpr": "NDPR",
-    "note for detailed project report": "NDPR",
-    "nfa": "NFA",
-    "note for approval": "NFA",
-    "nit": "NIT",
-    "notice inviting tender": "NIT",
-    "boq": "BOQ",
-    "bill of quantities": "BOQ",
-    "arb": "ARB",
-    "architecture review board": "ARB",
-}
+def build_section_guidance(section: Optional[dict]) -> str:
+    """Build the complementary spec block from a template section dict.
 
-
-@lru_cache(maxsize=1)
-def _load_specs() -> dict:
-    if not _SPECS_PATH.exists():
-        return {}
-    return json.loads(_SPECS_PATH.read_text(encoding="utf-8"))
-
-
-def _resolve_doc_type(doc_type: str) -> str:
-    """Normalize free-text doc type to the 3-5 letter key used in specs JSON."""
-    key = doc_type.lower().strip()
-    # Direct lookup
-    if key in _DOC_ALIASES:
-        return _DOC_ALIASES[key]
-    # Check if any alias is a substring of the input
-    for alias, resolved in _DOC_ALIASES.items():
-        if alias in key:
-            return resolved
-    return doc_type.upper()[:5]
-
-
-def _normalize(text: str) -> str:
-    """Reduce a section name to alphanum-only lowercase for fuzzy matching."""
-    return re.sub(r"[^a-z0-9]", "", text.lower())
-
-
-def get_section_spec(doc_type: str, section_name: str) -> Optional[dict]:
+    `section` is the section config as stored in templates/<doc>.json. Returns an
+    empty string when the section carries no spec fields.
     """
-    Return the mapping spec for a section, or None if not found.
-
-    Matching is done by normalising both the section name and each entry's
-    'section' field to lowercase alphanumeric, then trying:
-      1. Exact match on the normalised names
-      2. Either name is a substring of the other
-
-    Returns dict with keys: section, description, variables, format, remarks, depth
-    """
-    specs = _load_specs()
-    resolved = _resolve_doc_type(doc_type)
-    sections = specs.get(resolved, [])
-    if not sections:
-        return None
-
-    target = _normalize(section_name)
-
-    # Pass 1 — exact normalised match
-    for entry in sections:
-        if _normalize(entry["section"]) == target:
-            return entry
-
-    # Pass 2 — substring match, sorted longest-first so more specific names win.
-    # e.g. "nonfunctionalrequirement" is tried before "functionalrequirement"
-    # so "Non-Functional Requirements" won't accidentally match "Functional Requirement".
-    by_len = sorted(sections, key=lambda e: len(_normalize(e["section"])), reverse=True)
-    for entry in by_len:
-        norm = _normalize(entry["section"])
-        if norm in target or target in norm:
-            return entry
-
-    return None
-
-
-def get_bu_input_fields(doc_type: str, section_name: str) -> list[str]:
-    """
-    Return the BU input field names that feed this section/attribute,
-    according to the cross-document mapping sheet.
-
-    Useful for context collection — tells the agent which project form fields
-    to pull when gathering context for this section.
-    """
-    specs = _load_specs()
-    resolved = _resolve_doc_type(doc_type)
-    target = _normalize(section_name)
-    fields: list[str] = []
-
-    for entry in specs.get("cross_document_mapping", []):
-        if resolved not in entry.get("documents", []):
-            continue
-        attr_norm = _normalize(entry.get("section_attribute", ""))
-        if attr_norm == target or attr_norm in target or target in attr_norm:
-            fields = entry.get("bu_input_fields", [])
-            break
-
-    return fields
-
-
-def build_section_guidance(doc_type: str, section_name: str) -> str:
-    """
-    Build a formatted guidance block to inject into the LLM section prompt.
-
-    Returns an empty string if no spec is found (caller proceeds without it).
-
-    The returned block looks like:
-
-        ## ADANI TEMPLATE SPECIFICATION
-        **What to include:** Define system features/capabilities...
-        **Required columns:** Requirement Number, Sr., Description, ...
-        **Output format:** Table — generate a markdown pipe table with the columns above
-        **IDs / numbering:** Use requirement IDs like FR-001, FR-002
-        **Depth:** Detailed
-        **Key input fields:** Functional requirement, Proposed solution overview
-
-    This is appended to section_instructions in generator.py, so the LLM gets
-    both the generic template instructions AND the Adani-specific structure.
-    """
-    spec = get_section_spec(doc_type, section_name)
-    if not spec:
+    if not section:
         return ""
 
-    lines: list[str] = ["## ADANI TEMPLATE SPECIFICATION"]
+    lines = ["## ADANI TEMPLATE SPECIFICATION (authoritative — follow exactly)"]
 
-    if spec.get("description"):
-        lines.append(f"**What to include:** {spec['description']}")
+    # MUST NOT INCLUDE — the scope boundary keeps sections from bleeding into each
+    # other. Rendered first so the model reads the boundary before writing.
+    sb = (section.get("scope_boundary") or "").strip()
+    if sb:
+        sb = re.sub(r"^\s*EXCLUDE\s*:\s*", "", sb, flags=re.IGNORECASE).strip()
+        lines.append(f"**MUST NOT INCLUDE (scope boundary):** {sb}")
 
-    if spec.get("variables"):
-        lines.append(f"**Required columns / variables:** {spec['variables']}")
+    if section.get("variables"):
+        lines.append(f"**Required columns / variables:** {section['variables']}")
 
-    fmt = spec.get("format", "")
+    fmt = (section.get("format") or "").lower()
     if fmt:
-        fmt_lower = fmt.lower()
-        if "table" in fmt_lower:
-            cols = spec.get("variables", "")
+        if "table" in fmt:
+            cols = section.get("variables", "")
             header_rule = (
                 f" The FIRST row MUST be a header row with exactly these column names: {cols}."
                 if cols else
                 " The FIRST row MUST be a header row naming every column."
             )
             lines.append(
-                "**Output format:** Table — output a Markdown pipe table."
-                + header_rule +
+                "**Output format:** Table — output a Markdown pipe table." + header_rule +
                 " Immediately follow the header with a separator row (| --- | --- |), then the "
                 "data rows. Every data row must fill every column."
             )
-        elif "list" in fmt_lower:
-            lines.append("**Output format:** Bulleted list (- items)")
-        elif "text" in fmt_lower:
-            lines.append("**Output format:** Prose paragraphs")
+        elif "form" in fmt:
+            lines.append("**Output format:** Structured form — reproduce the form fields and labels exactly.")
+        elif "list" in fmt:
+            lines.append("**Output format:** Bulleted list (- items).")
+        elif "header" in fmt:
+            lines.append("**Output format:** Section header — a brief 1-2 line framing paragraph only.")
+        elif "text" in fmt:
+            lines.append("**Output format:** Prose paragraphs.")
 
-    if spec.get("remarks"):
-        lines.append(f"**Generation notes:** {spec['remarks']}")
+    depth = section.get("depth")
+    if depth == "Detailed":
+        lines.append("**Depth:** Detailed — cover thoroughly with specifics, metrics and named systems.")
+    elif depth == "Short":
+        lines.append("**Depth:** Short — concise; a few tight paragraphs or bullets, no padding.")
 
-    depth = spec.get("depth")
-    if depth in ("Detailed", "Short"):
-        lines.append(f"**Depth:** {depth}")
+    if section.get("remarks"):
+        lines.append(f"**Generation notes:** {section['remarks']}")
 
-    bu_fields = get_bu_input_fields(doc_type, section_name)
-    if bu_fields:
-        lines.append(f"**Key input fields to look for:** {', '.join(bu_fields)}")
+    src = section.get("source_fields")
+    if src:
+        src_str = ", ".join(src) if isinstance(src, (list, tuple)) else str(src)
+        lines.append(f"**Source fields to pull from (project inputs):** {src_str}")
 
-    return "\n".join(lines)
+    anx = section.get("annexure") or {}
+    ref = (anx.get("reference_text") or "").strip() if isinstance(anx, dict) else ""
+    if ref:
+        lines.append(f"**Regulatory / annexure reference (weave in where appropriate):** {ref}")
+
+    return "\n".join(lines) if len(lines) > 1 else ""

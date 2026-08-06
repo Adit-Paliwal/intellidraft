@@ -223,15 +223,24 @@ def _migrate_sqlite_columns(engine) -> None:
         tbl = mapper.local_table
         table_columns[tbl.name] = {c.name: c for c in tbl.columns}
 
+    # Identifier allow-list. Table/column names come from ORM metadata (trusted),
+    # but they are interpolated into DDL below — validate them against a strict
+    # SQL-identifier pattern so no unexpected name can ever reach the statement
+    # (defence-in-depth against SQL injection / CWE-89).
+    import re as _re
+    _IDENT = _re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
     with engine.connect() as conn:
         for table_name, columns in table_columns.items():
+            if not _IDENT.match(table_name):
+                continue
             rows = conn.execute(
                 __import__("sqlalchemy").text(f"PRAGMA table_info({table_name})")
             ).fetchall()
             existing = {r[1] for r in rows}  # column names already in the live table
 
             for col_name, col_obj in columns.items():
-                if col_name in existing:
+                if col_name in existing or not _IDENT.match(col_name):
                     continue
                 # Build a minimal DDL type string SQLite understands
                 col_type = col_obj.type.compile(dialect=engine.dialect)
@@ -318,7 +327,7 @@ def retry_on_locked(retries: int = 6, base_delay: float = 0.15):
                     return fn(*args, **kwargs)
                 except Exception as exc:
                     if _is_sqlite_locked(exc) and attempt < retries:
-                        delay = base_delay * (2 ** attempt) + random.uniform(0, base_delay)
+                        delay = base_delay * (2 ** attempt) + random.SystemRandom().uniform(0, base_delay)
                         _log.warning("[db] %s locked — retry %d/%d in %.2fs",
                                      fn.__name__, attempt + 1, retries, delay)
                         _time.sleep(delay)
@@ -502,9 +511,15 @@ class DocumentSnapshot(Base):
     job_id        = Column(String(36),  ForeignKey("generation_jobs.job_id"), nullable=False, index=True)
     created_at    = Column(DateTime,    default=datetime.utcnow)
     label         = Column(String(200), nullable=True)
-    # manual | review_agent | auto
+    # manual | review_agent | auto | manual_html (a whole-document edited-HTML save)
     trigger_type  = Column(String(50),  nullable=False, default="manual")
     section_refs  = Column(Text,        nullable=False, default="[]")
+    # Who created this version (display name from X-User-Name). For manual_html
+    # edits this is the person who edited the preview.
+    author        = Column(String(255), nullable=True)
+    # Raw edited HTML for a manual_html snapshot — stored verbatim so restoring a
+    # version loads exactly what the user saved. NULL for section-ref snapshots.
+    html_content  = Column(Text,        nullable=True)
 
     def get_section_refs(self) -> list:
         try:
@@ -512,15 +527,21 @@ class DocumentSnapshot(Base):
         except Exception:
             return []
 
-    def to_dict(self) -> dict:
-        return {
+    def to_dict(self, include_html: bool = False) -> dict:
+        d = {
             "snapshot_id":  self.snapshot_id,
             "job_id":       self.job_id,
             "created_at":   self.created_at.isoformat() if self.created_at else None,
             "label":        self.label,
             "trigger_type": self.trigger_type,
+            "author":       self.author,
+            "has_html":     bool(self.html_content),
             "section_refs": self.get_section_refs(),
         }
+        # html_content can be large — only include it on explicit single-get.
+        if include_html:
+            d["html_content"] = self.html_content
+        return d
 
 
 class SectionComment(Base):

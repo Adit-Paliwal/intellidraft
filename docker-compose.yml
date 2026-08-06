@@ -1,27 +1,35 @@
-# IntelliDraft — local / self-hosted Docker deployment (FastAPI, single service).
+# IntelliDraft — local / self-hosted Docker deployment (FastAPI).
 #
-#   docker compose up -d --build
-#   open http://localhost:7071/
+#   Default (in-process thread generation — nothing extra to run):
+#     docker compose up -d --build
+#     open http://localhost:7071/
 #
-# The Celery worker + Redis services were removed with the async preview stack —
-# document preview is now synchronous (LibreOffice in-process, markdown2 fallback)
-# and section generation is wave-parallel inside the app process.
+#   Durable queue (Celery worker + Redis broker) — set GENERATION_BACKEND=celery
+#   in Data_Ingestion/.env, then bring up the "celery" profile:
+#     docker compose --profile celery up -d --build
+#   This starts three services: the API, a Redis broker, and a Celery worker that
+#   runs generation jobs so they survive an API restart/crash.
+
+x-app-build: &app-build
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: intellidraft:latest
 
 services:
   intellidraft:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: intellidraft:latest
+    <<: *app-build
     container_name: intellidraft
     ports:
       - "7071:7071"
     env_file:
-      - Data_Ingestion/.env          # LLM creds, DATABRICKS_MODE, flags, etc.
+      - Data_Ingestion/.env          # LLM creds, DATABRICKS_MODE, GENERATION_BACKEND, etc.
     environment:
       - PORT=7071
-      - GENERATION_CONCURRENCY=4      # parallel section generation
+      - GENERATION_CONCURRENCY=6      # parallel section generation (per document)
       - THREADPOOL_TOKENS=80          # sync-endpoint concurrency
+      # When GENERATION_BACKEND=celery, the API enqueues to this in-network broker:
+      - CELERY_BROKER_URL=redis://redis:6379/0
       # - CORS_ALLOW_ORIGINS=https://your-host   # restrict origins in prod
     volumes:
       # Persist the local SQLite DB + parsed documents across restarts
@@ -37,5 +45,41 @@ services:
       retries: 3
       start_period: 25s
 
+  # ── Durable-queue services (only start with: docker compose --profile celery up) ──
+  redis:
+    image: redis:7-alpine
+    container_name: intellidraft-redis
+    profiles: ["celery"]
+    command: ["redis-server", "--appendonly", "yes"]   # persist the queue to disk
+    volumes:
+      - intellidraft_redis:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  worker:
+    <<: *app-build
+    container_name: intellidraft-worker
+    profiles: ["celery"]
+    # WORKDIR in the image is /app/Data_Ingestion, so `generation.celery_app` resolves.
+    command: ["celery", "-A", "generation.celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    env_file:
+      - Data_Ingestion/.env
+    environment:
+      - GENERATION_CONCURRENCY=6
+      - CELERY_BROKER_URL=redis://redis:6379/0
+    volumes:
+      # The worker needs the SAME storage + LLM creds as the API.
+      - intellidraft_storage:/app/Data_Ingestion/local_storage
+      - ./Data_Ingestion/key.json:/app/Data_Ingestion/key.json:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   intellidraft_storage:
+  intellidraft_redis:
